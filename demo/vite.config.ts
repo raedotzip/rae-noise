@@ -7,7 +7,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   root: 'demo/',
-  base: '/rae-noise/',
+  base: '/',
   plugins: [glsl()],
   resolve: {
     alias: {

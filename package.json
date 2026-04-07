@@ -16,12 +16,10 @@
     }
   },
   "scripts": {
-    "build:wasm": "wasm-pack build crate/ --target web --out-dir dist/wasm --release",
     "build:lib": "rollup -c rollup.config.ts",
-    "build": "npm run build:wasm && npm run build:lib",
+    "build": "npm run build:lib",
     "demo": "vite --config demo/vite.config.ts",
-    "build:demo": "vite build --config demo/vite.config.ts",
-    "prepublishOnly": "npm run build"
+    "build:demo": "vite build --config demo/vite.config.ts"
   },
   "files": [
     "dist/",
