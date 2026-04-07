@@ -1,0 +1,42 @@
+{
+  "name": "rae-noise",
+  "version": "1.0.0",
+  "description": "Generate noise values for cool website visuals",
+  "license": "ISC",
+  "author": "Raegan Scheet",
+  "type": "module",
+  "main": "dist/cjs/index.cjs",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types":   "./dist/types/index.d.ts",
+      "import":  "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs"
+    }
+  },
+  "scripts": {
+    "build:wasm": "wasm-pack build crate/ --target web --out-dir dist/wasm --release",
+    "build:lib": "rollup -c rollup.config.ts",
+    "build": "npm run build:wasm && npm run build:lib",
+    "demo": "vite --config demo/vite.config.ts",
+    "build:demo": "vite build --config demo/vite.config.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-typescript": "^12.0.0",
+    "@rollup/plugin-wasm": "^6.0.0",
+    "@types/node": "^25.5.2",
+    "rollup": "^4.0.0",
+    "rollup-plugin-glsl": "^1.3.0",
+    "tslib": "^2.6.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.4.2",
+    "vite-plugin-glsl": "^1.6.0"
+  }
+}
