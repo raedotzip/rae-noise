@@ -1,0 +1,23 @@
+{
+  "name": "Raegan Scheet Developer Portfolio",
+  "short_name": "RaeNoise",
+  "description": "Website for RaeNoise, A Noise Generation Visual Library",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020611",
+  "theme_color": "#020611",
+  "icons": [
+    {
+      "src": "/icons/rae-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/rae-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

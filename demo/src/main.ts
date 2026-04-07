@@ -7,6 +7,7 @@ import type { PaletteStop } from '../../src/types';
 import { hexToRgb } from './color';
 import { makeLayerCard } from './layerCard';
 import { createNodeGraph } from './nodeGraph';
+import "./../styles/styles.css";
 
 // ── Renderer setup ────────────────────────────────────────
 const canvas   = document.getElementById('glCanvas') as HTMLCanvasElement;
