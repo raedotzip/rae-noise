@@ -1,0 +1,31 @@
+.layer-drag-handle {
+  cursor: grab;
+  color: rgba(255,255,255,0.2);
+  font-size: 0.7rem;
+  padding: 0 2px;
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.layer-drag-handle:hover {
+  color: rgba(255,255,255,0.6);
+}
+
+.layer-drag-handle:active {
+  cursor: grabbing;
+}
+
+.layer-card.drag-over-top {
+  border-top: 2px solid rgba(255,255,255,0.5);
+}
+
+.layer-card.drag-over-bottom {
+  border-bottom: 2px solid rgba(255,255,255,0.5);
+}
+
+.layer-card.dragging {
+  opacity: 0.35;
+  pointer-events: none;
+}

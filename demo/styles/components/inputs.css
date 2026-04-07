@@ -1,0 +1,39 @@
+.layer-name-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--text);
+  font-size: 0.7rem;
+  font-family: var(--ui);
+  outline: none;
+}
+
+.layer-name-input:focus {
+  border-bottom-color: var(--glass-border);
+}
+
+.value-input {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: white;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 3px;
+  width: 52px;
+  padding: 1px 4px;
+  text-align: right;
+  outline: none;
+  /* hide spinner arrows */
+  -moz-appearance: textfield;
+}
+
+.value-input::-webkit-outer-spin-button,
+.value-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.value-input:focus {
+  border-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.12);
+}

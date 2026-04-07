@@ -1,0 +1,46 @@
+.palette-stops {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.palette-stop input[type="color"] {
+  width: 26px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--glass-border);
+  background: none;
+}
+
+.palette-stop-remove {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.palette-stop-remove:hover {
+  color: #ff6b6b;
+}
+
+.palette-add {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px dashed var(--glass-border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.palette-add:hover {
+  color: white;
+  border-color: white;
+}
+
+.palette-preview {
+  height: 6px;
+  border-radius: 3px;
+  border: 1px solid var(--glass-border);
+}

@@ -1,0 +1,28 @@
+.chip-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  font-size: 0.65rem;
+  padding: 4px 8px;
+
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--glass-border);
+  border-radius: 0.5rem;
+
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chip:hover {
+  background: var(--glass-hover);
+  color: white;
+}
+
+.chip.active {
+  background: rgba(255,255,255,0.2);
+  color: white;
+}

@@ -1,0 +1,18 @@
+:root {
+  --bg: #000;
+  --bg-soft: radial-gradient(circle at center, #020617, #000);
+
+  --glass: rgba(255, 255, 255, 0.08);
+  --glass-strong: rgba(255, 255, 255, 0.14);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-hover: rgba(255, 255, 255, 0.22);
+
+  --text: rgba(255, 255, 255, 0.9);
+  --text-dim: rgba(255, 255, 255, 0.5);
+
+  --radius: 0.75rem;
+  --blur: 10px;
+
+  --mono: 'JetBrains Mono', monospace;
+  --ui: system-ui, -apple-system, sans-serif;
+}

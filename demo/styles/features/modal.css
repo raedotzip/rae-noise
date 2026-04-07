@@ -1,0 +1,67 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-backdrop.hidden {
+  display: none;
+}
+
+.modal-panel {
+  width: min(900px, 92vw);
+  height: min(620px, 85vh);
+  background: rgba(10,10,20,0.95);
+  border: 1px solid var(--glass-border);
+  border-radius: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+}
+
+.modal-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.modal-close:hover {
+  color: white;
+}
+
+#nodeCanvas {
+  flex: 1;
+  display: block;
+  cursor: default;
+}
+
+.modal-hint {
+  padding: 8px 18px;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  border-top: 1px solid var(--glass-border);
+  letter-spacing: 0.05em;
+}

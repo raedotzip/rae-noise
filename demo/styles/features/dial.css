@@ -1,0 +1,39 @@
+.dir-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dial {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.05);
+  cursor: grab;
+  position: relative;
+}
+
+.dial:active {
+  cursor: grabbing;
+}
+
+.dial-needle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 2px;
+  background: white;
+  transform-origin: left center;
+}
+
+.dir-values {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.accent {
+  color: white;
+  font-family: var(--mono);
+}

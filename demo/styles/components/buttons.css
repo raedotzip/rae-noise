@@ -1,0 +1,31 @@
+.add-row {
+  padding: 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.add-btn {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-btn-secondary {
+  margin-top: 6px;
+}
+
+.add-btn:hover {
+  background: var(--glass-hover);
+  transform: translateY(-2px);
+}
