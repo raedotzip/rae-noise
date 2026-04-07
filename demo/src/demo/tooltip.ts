@@ -1,4 +1,4 @@
-import TOOLTIPS from './data/tooltips.json';
+import TOOLTIPS from '../data/tooltips.json';
 
 export { TOOLTIPS };
 

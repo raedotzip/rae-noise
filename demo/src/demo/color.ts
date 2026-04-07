@@ -1,4 +1,4 @@
-import type { PaletteStop } from '../../src/types';
+import type { PaletteStop } from '../../../src/types';
 
 export function hexToRgb(hex: string): PaletteStop {
   const n = parseInt(hex.slice(1), 16);

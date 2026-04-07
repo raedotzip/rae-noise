@@ -1,5 +1,5 @@
 import Handlebars from 'handlebars';
-import type { NoiseLayer, NoiseType, BlendMode, FlowType } from '../../src/types';
+import type { NoiseLayer, NoiseType, BlendMode, FlowType } from '../../../src/types';
 import { swatchGradient, rgbToHex } from './color';
 import {
   makeChipGroup,

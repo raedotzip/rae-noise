@@ -1,4 +1,4 @@
-import type { NoiseLayer } from '../../src/types';
+import type { NoiseLayer } from '../../../src/types';
 import { rgbToHex } from './color';
 
 interface GraphNode {
