@@ -1,0 +1,14 @@
+<div class="group">
+  <div class="group-label">
+    {{label}}
+    {{> widgets/info-btn key=label}}
+  </div>
+  <div class="chip-group">
+    {{#each options}}
+      <button
+        class="chip{{#if (eq this ../current)}} active{{/if}}"
+        data-value="{{this}}"
+      >{{this}}</button>
+    {{/each}}
+  </div>
+</div>

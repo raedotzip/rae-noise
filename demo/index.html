@@ -26,66 +26,7 @@
 </head>
 
 <body>
-  <div id="app">
-
-    <aside id="panel">
-
-      <header class="panel-header">
-        <span class="logo">rae<em>noise</em></span>
-        <span class="tag">demo tool</span>
-      </header>
-
-      <div class="add-row">
-        <button id="addLayerBtn" class="add-btn">
-          <span class="add-btn-icon">+</span>
-          <span class="add-btn-label">add layer</span>
-        </button>
-
-        <button id="openNodeGraph" class="add-btn add-btn-secondary">
-          <span class="add-btn-icon">⬡</span>
-          <span class="add-btn-label">node graph</span>
-        </button>
-      </div>
-
-      <div id="layerList"></div>
-
-      <footer class="panel-footer">
-        <div class="fps-counter">
-          <span class="fps-dot"></span>
-          <span id="fps">-- fps</span>
-        </div>
-        <span class="hint">layers composite top→bottom</span>
-      </footer>
-
-    </aside>
-
-    <main id="viewport">
-      <canvas id="glCanvas"></canvas>
-      <div id="overlay-label">rae-noise v1.0.0</div>
-    </main>
-
-  </div>
-
-  <!-- Modal -->
-  <div id="nodeModal" class="modal-backdrop hidden">
-    <div class="modal-panel">
-      <div class="modal-header">
-        <span class="modal-title">node graph</span>
-        <button id="nodeModalClose" class="modal-close">✕</button>
-      </div>
-      <canvas id="nodeCanvas"></canvas>
-      <div class="modal-hint">
-        drag nodes · click ports to connect · double-click canvas to add
-      </div>
-    </div>
-  </div>
-
-  <!-- Tooltip -->
-  <div id="tooltip">
-    <div class="tooltip-title" id="tooltipTitle"></div>
-    <div class="tooltip-body" id="tooltipBody"></div>
-  </div>
-
+  <main id="app"></main>
   <script type="module" src="src/main.ts"></script>
 </body>
 </html>

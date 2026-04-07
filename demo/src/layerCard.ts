@@ -1,5 +1,6 @@
+import Handlebars from 'handlebars';
 import type { NoiseLayer, NoiseType, BlendMode, FlowType } from '../../src/types';
-import { swatchGradient } from './color';
+import { swatchGradient, rgbToHex } from './color';
 import {
   makeChipGroup,
   makeToggleRow,
@@ -16,7 +17,7 @@ interface LayerCardDeps {
     removeLayer:  (id: string) => void;
     reorderLayers: (ids: string[]) => void;
   };
-  onSync: () => void; // callback to re-sync node graph
+  onSync: () => void;
 }
 
 export function makeLayerCard(
@@ -27,11 +28,23 @@ export function makeLayerCard(
   const layer = renderer.getLayers().find(l => l.id === id)!;
   let visible  = true;
 
+  // ── Render card shell from Handlebars template ────────────
+  const noiseTypes: NoiseType[]  = ['simplex', 'perlin', 'worley', 'fbm', 'curl'];
+  const blendModes: BlendMode[]  = ['add', 'multiply', 'screen', 'overlay'];
+  const flowTypes:  FlowType[]   = ['linear', 'radial', 'spiral', 'vortex', 'turbulent'];
+
+  const templateSrc = (Handlebars.partials as Record<string, string>)['layer/layer-card'] ??
+    // fallback: compile the template registered under templates key
+    null;
+
+  // Build the card element from scratch (the template gives us structure,
+  // but all real widget bodies are still constructed by widget helpers so
+  // interactivity is preserved exactly as before).
   const card = document.createElement('div');
   card.className  = 'layer-card open';
   card.dataset.id = id;
 
-  // ── Patch helper ─────────────────────────────────────────
+  // ── Patch helper ──────────────────────────────────────────
   function patch(p: Partial<NoiseLayer>) {
     renderer.updateLayer(id, p);
     updateSwatch();
@@ -40,45 +53,34 @@ export function makeLayerCard(
   function updateSwatch() {
     const l = renderer.getLayers().find(x => x.id === id);
     if (!l) return;
-    const swatch = card.querySelector<HTMLElement>('.layer-swatch');
+    const swatch  = card.querySelector<HTMLElement>('.layer-swatch');
     if (swatch) swatch.style.background = swatchGradient(l.palette);
     const preview = card.querySelector<HTMLElement>('.palette-preview');
     if (preview) preview.style.background = swatchGradient(l.palette);
   }
 
-  // ── HEADER ───────────────────────────────────────────────
-  const header = document.createElement('div');
-  header.className = 'layer-header';
+  // ── HEADER (from partial) ─────────────────────────────────
+  const headerSrc = (Handlebars.partials as Record<string, string>)['layer/layer-header'];
+  const headerHtml = Handlebars.compile(headerSrc)({
+    layerNum,
+    name:          layer.name,
+    swatchGradient: swatchGradient(layer.palette),
+  });
 
-  const badge = document.createElement('span');
-  badge.className   = 'layer-badge';
-  badge.textContent = String(layerNum);
+  const headerWrap = document.createElement('div');
+  headerWrap.innerHTML = headerHtml;
+  const header = headerWrap.firstElementChild as HTMLElement;
 
-  const swatch = document.createElement('div');
-  swatch.className        = 'layer-swatch';
-  swatch.style.background = swatchGradient(layer.palette);
-
-  const nameInput = document.createElement('input');
-  nameInput.className   = 'layer-name-input';
-  nameInput.value       = layer.name;
-  nameInput.placeholder = 'layer name';
+  // Wire header events
+  const nameInput = header.querySelector<HTMLInputElement>('.layer-name-input')!;
   nameInput.addEventListener('change', () => {
     patch({ name: nameInput.value.trim() || `layer ${layerNum}` });
     onSync();
   });
   nameInput.addEventListener('click', e => e.stopPropagation());
-  nameInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') nameInput.blur();
-  });
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') nameInput.blur(); });
 
-  const visBtn = document.createElement('button');
-  visBtn.className = 'layer-vis active';
-  visBtn.title     = 'Toggle visibility';
-  visBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>`;
+  const visBtn = header.querySelector<HTMLButtonElement>('.layer-vis')!;
   visBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     visible = !visible;
@@ -88,13 +90,7 @@ export function makeLayerCard(
     card.classList.toggle('layer-hidden', !visible);
   });
 
-  const arrow = document.createElement('span');
-  arrow.className   = 'layer-toggle';
-  arrow.textContent = '▶';
-
-  const removeBtn = document.createElement('button');
-  removeBtn.className   = 'layer-remove';
-  removeBtn.textContent = '✕';
+  const removeBtn = header.querySelector<HTMLButtonElement>('.layer-remove')!;
   removeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     renderer.removeLayer(id);
@@ -102,14 +98,12 @@ export function makeLayerCard(
     onSync();
   });
 
-  header.append(badge, swatch, nameInput, visBtn, arrow, removeBtn);
   header.addEventListener('click', () => card.classList.toggle('open'));
 
-  // ── BODY ─────────────────────────────────────────────────
+  // ── BODY (widgets built programmatically, attached to a wrapper) ──
   const body = document.createElement('div');
   body.className = 'layer-body';
 
-  const noiseTypes: NoiseType[] = ['simplex', 'perlin', 'worley', 'fbm', 'curl'];
   body.appendChild(makeChipGroup('noise type', noiseTypes, layer.noiseType, (v) => {
     patch({ noiseType: v as NoiseType });
     const og = body.querySelector<HTMLElement>('.octaves-group');
@@ -117,7 +111,6 @@ export function makeLayerCard(
     onSync();
   }));
 
-  const blendModes: BlendMode[] = ['add', 'multiply', 'screen', 'overlay'];
   body.appendChild(makeChipGroup('blend mode', blendModes, layer.blendMode, (v) => {
     patch({ blendMode: v as BlendMode });
   }));
@@ -129,7 +122,6 @@ export function makeLayerCard(
     flowGroup.style.display = v ? 'block' : 'none';
   }));
 
-  const flowTypes: FlowType[] = ['linear', 'radial', 'spiral', 'vortex', 'turbulent'];
   flowGroup.appendChild(makeChipGroup('flow type', flowTypes, layer.flowType, (v) => {
     patch({ flowType: v as FlowType });
     const dd = body.querySelector<HTMLElement>('.dir-group');
@@ -139,8 +131,8 @@ export function makeLayerCard(
   flowGroup.style.display = layer.animate ? 'block' : 'none';
   body.appendChild(flowGroup);
 
-  body.appendChild(makeSlider('scale', 0.1, 12, 0.1, layer.scale, 1, (v) => patch({ scale: v })));
-  body.appendChild(makeSlider('speed', 0, 3, 0.01, layer.speed, 2, (v) => patch({ speed: v })));
+  body.appendChild(makeSlider('scale',  0.1, 12, 0.1,  layer.scale,   1, (v) => patch({ scale: v })));
+  body.appendChild(makeSlider('speed',  0,   3,  0.01, layer.speed,   2, (v) => patch({ speed: v })));
 
   const dialGroup = document.createElement('div');
   dialGroup.className = 'dir-group';
@@ -153,10 +145,10 @@ export function makeLayerCard(
   if (layer.noiseType !== 'fbm') octGroup.classList.add('disabled');
   body.appendChild(octGroup);
 
-  body.appendChild(makeSlider('contrast',   0.1, 4,  0.05, layer.contrast,      2, (v) => patch({ contrast: v })));
-  body.appendChild(makeSlider('brightness', -1,  1,  0.01, layer.brightness,    2, (v) => patch({ brightness: v })));
-  body.appendChild(makeSlider('domain warp', 0,  2,  0.01, layer.warp,          2, (v) => patch({ warp: v })));
-  body.appendChild(makeSlider('curl flow',   0,  2,  0.01, layer.curlStrength,  2, (v) => patch({ curlStrength: v })));
+  body.appendChild(makeSlider('contrast',    0.1, 4,  0.05, layer.contrast,     2, (v) => patch({ contrast: v })));
+  body.appendChild(makeSlider('brightness',  -1,  1,  0.01, layer.brightness,   2, (v) => patch({ brightness: v })));
+  body.appendChild(makeSlider('domain warp', 0,   2,  0.01, layer.warp,         2, (v) => patch({ warp: v })));
+  body.appendChild(makeSlider('curl flow',   0,   2,  0.01, layer.curlStrength, 2, (v) => patch({ curlStrength: v })));
 
   body.appendChild(makeSlider('opacity', 0, 1, 0.01, layer.opacity, 2, (v) => {
     patch({ opacity: v });
@@ -170,12 +162,8 @@ export function makeLayerCard(
     onSync();
   }));
 
-  // ── Drag handle ──────────────────────────────────────────
-  const dragHandle = document.createElement('span');
-  dragHandle.className   = 'layer-drag-handle';
-  dragHandle.textContent = '⠿';
-  dragHandle.title       = 'Drag to reorder';
-  header.insertBefore(dragHandle, header.firstChild);
+  // ── Drag handle events ────────────────────────────────────
+  const dragHandle = header.querySelector<HTMLElement>('.layer-drag-handle')!;
 
   dragHandle.addEventListener('mousedown', () => { card.draggable = true; });
   document.addEventListener('mouseup', () => { card.draggable = false; }, { capture: true });
@@ -197,10 +185,8 @@ export function makeLayerCard(
   card.addEventListener('dragover', (e) => {
     e.preventDefault();
     e.dataTransfer!.dropEffect = 'move';
-
     const rect  = card.getBoundingClientRect();
     const isTop = e.clientY < rect.top + rect.height / 2;
-
     document.querySelectorAll('.layer-card').forEach(c => {
       c.classList.remove('drag-over-top', 'drag-over-bottom');
     });
@@ -215,25 +201,16 @@ export function makeLayerCard(
     e.preventDefault();
     const fromId = e.dataTransfer!.getData('text/plain');
     if (fromId === id) return;
-
     const fromCard = layerList.querySelector<HTMLElement>(`[data-id="${fromId}"]`);
     if (!fromCard) return;
-
     const rect  = card.getBoundingClientRect();
     const isTop = e.clientY < rect.top + rect.height / 2;
-
-    if (isTop) {
-      layerList.insertBefore(fromCard, card);
-    } else {
-      layerList.insertBefore(fromCard, card.nextSibling);
-    }
-
+    if (isTop) layerList.insertBefore(fromCard, card);
+    else       layerList.insertBefore(fromCard, card.nextSibling);
     card.classList.remove('drag-over-top', 'drag-over-bottom');
-
     const orderedIds = [...layerList.querySelectorAll<HTMLElement>('.layer-card')]
       .map(c => c.dataset.id!)
       .reverse();
-
     renderer.reorderLayers(orderedIds);
     onSync();
   });

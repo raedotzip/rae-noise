@@ -17,5 +17,6 @@ export default defineConfig({
   build: {
     outDir: '../dist-demo',
     emptyOutDir: true,
-  }
+  },
+  assetsInclude: ["views/**/*.hbs"],
 });

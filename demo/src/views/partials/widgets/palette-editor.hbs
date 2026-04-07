@@ -1,0 +1,18 @@
+<div class="group">
+  <div class="group-label">
+    palette
+    {{> widgets/info-btn key="palette"}}
+  </div>
+  <div class="palette-stops">
+    {{#each stops}}
+      <div class="palette-stop">
+        <input type="color" value="{{this}}" />
+        {{#if ../canRemove}}
+          <button class="palette-stop-remove">✕</button>
+        {{/if}}
+      </div>
+    {{/each}}
+  </div>
+  <button class="palette-add"{{#if maxReached}} disabled{{/if}}>+ stop</button>
+  <div class="palette-preview"></div>
+</div>

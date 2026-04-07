@@ -11,6 +11,7 @@
       "*.glsl": ["./src/types/glsl.d.ts"]
     },
     "typeRoots": ["./node_modules/@types"],
+    "resolveJsonModule": true
   },
   "include": ["src/**/*", "demo/**/*"]
 }

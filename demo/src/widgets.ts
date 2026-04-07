@@ -1,73 +1,75 @@
+import Handlebars from 'handlebars';
 import type { PaletteStop } from '../../src/types';
 import { makeInfoBtn } from './tooltip';
 import { rgbToHex, swatchGradient } from './color';
 
+// ── Handlebars eq helper (needed by chip-group active check) ──
+Handlebars.registerHelper('eq', (a: unknown, b: unknown) => a === b);
+
+// ── Lazy partial compiler cache ───────────────────────────────
+// We compile the partials that were registered by views/index.ts
+function partial(name: string): Handlebars.TemplateDelegate {
+  const src = (Handlebars.partials as Record<string, string>)[name];
+  if (typeof src !== 'string') throw new Error(`Partial not found: ${name}`);
+  return Handlebars.compile(src);
+}
+
+// ── Shared: wire info-btn events on an element ─────────────────
+function wireInfoBtns(root: HTMLElement) {
+  root.querySelectorAll<HTMLButtonElement>('.info-btn').forEach(btn => {
+    const key = btn.title;
+    // Replace the static btn with a fully-wired one from makeInfoBtn
+    const wired = makeInfoBtn(key);
+    btn.replaceWith(wired);
+  });
+}
+
+// ── chip group ────────────────────────────────────────────────
 export function makeChipGroup(
   label: string,
   options: string[],
   current: string,
   onChange: (v: string) => void
 ): HTMLElement {
-  const g = document.createElement('div');
-  g.className = 'group';
+  const html = partial('widgets/chip-group')({ label, options, current });
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const g = wrap.firstElementChild as HTMLElement;
 
-  const labelEl = document.createElement('div');
-  labelEl.className = 'group-label';
-  labelEl.textContent = label;
-  labelEl.appendChild(makeInfoBtn(label));
+  wireInfoBtns(g);
 
-  const row = document.createElement('div');
-  row.className = 'chip-group';
-
-  g.append(labelEl, row);
-
-  options.forEach(o => {
-    const btn = document.createElement('button');
-    btn.className     = `chip${o === current ? ' active' : ''}`;
-    btn.dataset.value = o;
-    btn.textContent   = o;
+  g.querySelectorAll<HTMLButtonElement>('.chip').forEach(btn => {
     btn.addEventListener('click', () => {
-      row.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+      g.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      onChange(o);
+      onChange(btn.dataset.value!);
     });
-    row.appendChild(btn);
   });
 
   return g;
 }
 
+// ── toggle row ────────────────────────────────────────────────
 export function makeToggleRow(
   label: string,
   initial: boolean,
   onChange: (v: boolean) => void
 ): HTMLElement {
-  const g = document.createElement('div');
-  g.className = 'group';
+  const html = partial('widgets/toggle-row')({ label, checked: initial });
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const g = wrap.firstElementChild as HTMLElement;
 
-  const labelEl = document.createElement('span');
-  labelEl.className = 'group-label';
-  labelEl.style.margin = '0';
-  labelEl.textContent = label;
-  labelEl.appendChild(makeInfoBtn(label));
+  wireInfoBtns(g);
 
-  const toggle = document.createElement('label');
-  toggle.className = 'toggle';
-  toggle.innerHTML = `
-    <input type="checkbox" ${initial ? 'checked' : ''} />
-    <div class="toggle-track"><div class="toggle-thumb"></div></div>`;
-  toggle.querySelector('input')!.addEventListener('change', (e) => {
+  g.querySelector('input')!.addEventListener('change', (e) => {
     onChange((e.target as HTMLInputElement).checked);
   });
-
-  const row = document.createElement('div');
-  row.className = 'toggle-row';
-  row.append(labelEl, toggle);
-  g.appendChild(row);
 
   return g;
 }
 
+// ── slider ────────────────────────────────────────────────────
 export function makeSlider(
   label: string,
   min: number,
@@ -77,59 +79,34 @@ export function makeSlider(
   decimals: number,
   onChange: (v: number) => void
 ): HTMLElement {
-  const g = document.createElement('div');
-  g.className = 'group';
+  const html = partial('widgets/slider')({
+    label,
+    min,
+    max,
+    step,
+    value: value.toFixed(decimals),
+  });
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const g = wrap.firstElementChild as HTMLElement;
 
-  // Label row
-  const labelEl = document.createElement('div');
-  labelEl.className = 'group-label';
+  wireInfoBtns(g);
 
-  const labelLeft = document.createElement('span');
-  labelLeft.style.cssText = 'display:flex;align-items:center;gap:4px;';
-  labelLeft.textContent = label;
-  labelLeft.appendChild(makeInfoBtn(label));
-
-  const valueDisplay = document.createElement('span');
-  valueDisplay.className    = 'value-display';
-  valueDisplay.textContent  = value.toFixed(decimals);
-  valueDisplay.title        = 'Click to enter a value';
-  valueDisplay.style.cursor = 'text';
-
-  const valueInput = document.createElement('input');
-  valueInput.type          = 'number';
-  valueInput.className     = 'value-input';
-  valueInput.min           = String(min);
-  valueInput.max           = String(max);
-  valueInput.step          = String(step);
-  valueInput.value         = value.toFixed(decimals);
-  valueInput.style.display = 'none';
-
-  labelEl.append(labelLeft, valueDisplay, valueInput);
-
-  const rangeInput = document.createElement('input');
-  rangeInput.type      = 'range';
-  rangeInput.className = 'slider';
-  rangeInput.min       = String(min);
-  rangeInput.max       = String(max);
-  rangeInput.step      = String(step);
-  rangeInput.value     = String(value);
-
-  g.append(labelEl, rangeInput);
+  const rangeInput    = g.querySelector<HTMLInputElement>('input[type="range"]')!;
+  const valueDisplay  = g.querySelector<HTMLElement>('.value-display')!;
+  const valueInput    = g.querySelector<HTMLInputElement>('.value-input')!;
 
   function applyValue(v: number) {
     v = Math.min(max, Math.max(min, v));
     const factor = Math.pow(10, decimals);
     v = Math.round(v * factor) / factor;
-
     valueDisplay.textContent = v.toFixed(decimals);
     valueInput.value         = v.toFixed(decimals);
     rangeInput.value         = String(v);
     onChange(v);
   }
 
-  rangeInput.addEventListener('input', () => {
-    applyValue(parseFloat(rangeInput.value));
-  });
+  rangeInput.addEventListener('input', () => applyValue(parseFloat(rangeInput.value)));
 
   valueDisplay.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -161,42 +138,27 @@ export function makeSlider(
   return g;
 }
 
+// ── dial ──────────────────────────────────────────────────────
 export function makeDial(
   initial: [number, number],
   onChange: (dir: [number, number]) => void
 ): HTMLElement {
-  const g = document.createElement('div');
-  g.className = 'group';
-
   let angle = Math.atan2(initial[1], initial[0]);
 
-  const dialEl = document.createElement('div');
-  dialEl.className = 'dial';
-  const needle = document.createElement('div');
-  needle.className = 'dial-needle';
-  dialEl.appendChild(needle);
+  const html = partial('widgets/dial')({
+    dx: initial[0].toFixed(2),
+    dy: initial[1].toFixed(2),
+  });
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const g = wrap.firstElementChild as HTMLElement;
 
-  const dxEl = document.createElement('span');
-  const dyEl = document.createElement('span');
-  dxEl.className = 'accent';
-  dyEl.className = 'accent';
-  dxEl.textContent = initial[0].toFixed(2);
-  dyEl.textContent = initial[1].toFixed(2);
+  wireInfoBtns(g);
 
-  const vals = document.createElement('div');
-  vals.className = 'dir-values';
-  vals.append('dx ', dxEl, document.createElement('br'), 'dy ', dyEl);
-
-  const row = document.createElement('div');
-  row.className = 'dir-row';
-  row.append(dialEl, vals);
-
-  const lbl = document.createElement('div');
-  lbl.className = 'group-label';
-  lbl.textContent = 'direction';
-  lbl.appendChild(makeInfoBtn('direction'));
-
-  g.append(lbl, row);
+  const dialEl = g.querySelector<HTMLElement>('.dial')!;
+  const needle = g.querySelector<HTMLElement>('.dial-needle')!;
+  const dxEl   = g.querySelector<HTMLElement>('[data-dir="dx"]')!;
+  const dyEl   = g.querySelector<HTMLElement>('[data-dir="dy"]')!;
 
   function setAngle(a: number) {
     angle = a;
@@ -229,85 +191,68 @@ export function makeDial(
   return g;
 }
 
+// ── palette editor ────────────────────────────────────────────
 export function makePaletteEditor(
   initial: PaletteStop[],
   onChange: (pal: PaletteStop[]) => void
 ): HTMLElement {
-  const g = document.createElement('div');
-  g.className = 'group';
-
-  const labelEl = document.createElement('div');
-  labelEl.className = 'group-label';
-  labelEl.textContent = 'palette';
-  labelEl.appendChild(makeInfoBtn('palette'));
-
-  const stopsRow = document.createElement('div');
-  stopsRow.className = 'palette-stops';
-
-  const addBtn = document.createElement('button');
-  addBtn.className = 'palette-add';
-  addBtn.textContent = '+ stop';
-
-  const preview = document.createElement('div');
-  preview.className = 'palette-preview';
-
-  g.append(labelEl, stopsRow, addBtn, preview);
-
   let stops: PaletteStop[] = [...initial];
 
-  function renderStops() {
-    stopsRow.innerHTML = '';
-    stops.forEach((stop, i) => {
-      const wrap = document.createElement('div');
-      wrap.className = 'palette-stop';
+  function hexToRgbLocal(hex: string): PaletteStop {
+    const n = parseInt(hex.slice(1), 16);
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  }
 
-      const picker = document.createElement('input');
-      picker.type  = 'color';
-      picker.value = rgbToHex(stop);
+  function render(): HTMLElement {
+    const html = partial('widgets/palette-editor')({
+      stops:            stops.map(s => rgbToHex(s)),
+      canRemove:        stops.length > 2,
+      maxReached:       stops.length >= 8,
+    });
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    const g = wrap.firstElementChild as HTMLElement;
+
+    wireInfoBtns(g);
+
+    const preview   = g.querySelector<HTMLElement>('.palette-preview')!;
+    const stopsRow  = g.querySelector<HTMLElement>('.palette-stops')!;
+    const addBtn    = g.querySelector<HTMLButtonElement>('.palette-add')!;
+
+    preview.style.background = swatchGradient(stops);
+
+    stopsRow.querySelectorAll<HTMLInputElement>('input[type="color"]').forEach((picker, i) => {
       picker.addEventListener('input', () => {
-        stops[i] = hexToRgb(picker.value);
+        stops[i] = hexToRgbLocal(picker.value);
         preview.style.background = swatchGradient(stops);
         onChange(stops);
       });
-      wrap.appendChild(picker);
-
-      if (stops.length > 2) {
-        const del = document.createElement('button');
-        del.className   = 'palette-stop-remove';
-        del.textContent = '✕';
-        del.addEventListener('click', () => {
-          stops.splice(i, 1);
-          renderStops();
-          onChange(stops);
-        });
-        wrap.appendChild(del);
-      }
-
-      stopsRow.appendChild(wrap);
     });
 
-    preview.style.background = swatchGradient(stops);
-    (addBtn as HTMLButtonElement).disabled = stops.length >= 8;
+    stopsRow.querySelectorAll<HTMLButtonElement>('.palette-stop-remove').forEach((btn, i) => {
+      btn.addEventListener('click', () => {
+        stops.splice(i, 1);
+        const newG = render();
+        g.replaceWith(newG);
+        onChange(stops);
+      });
+    });
+
+    addBtn.addEventListener('click', () => {
+      if (stops.length >= 8) return;
+      const last = stops[stops.length - 1];
+      stops.push([
+        Math.min(1, last[0] + 0.1 + Math.random() * 0.4),
+        Math.min(1, last[1] + 0.1 + Math.random() * 0.4),
+        Math.min(1, last[2] + 0.1 + Math.random() * 0.4),
+      ]);
+      const newG = render();
+      g.replaceWith(newG);
+      onChange(stops);
+    });
+
+    return g;
   }
 
-  addBtn.addEventListener('click', () => {
-    if (stops.length >= 8) return;
-    const last = stops[stops.length - 1];
-    stops.push([
-      Math.min(1, last[0] + 0.1 + Math.random() * 0.4),
-      Math.min(1, last[1] + 0.1 + Math.random() * 0.4),
-      Math.min(1, last[2] + 0.1 + Math.random() * 0.4),
-    ]);
-    renderStops();
-    onChange(stops);
-  });
-
-  renderStops();
-  return g;
-}
-
-// Re-export hexToRgb for use inside makePaletteEditor
-function hexToRgb(hex: string): PaletteStop {
-  const n = parseInt(hex.slice(1), 16);
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  return render();
 }

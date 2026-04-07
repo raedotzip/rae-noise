@@ -1,0 +1,26 @@
+<div class="group" data-slider-label="{{label}}">
+  <div class="group-label">
+    <span style="display:flex;align-items:center;gap:4px;">
+      {{label}}
+      {{> widgets/info-btn key=label}}
+    </span>
+    <span class="value-display" title="Click to enter a value" style="cursor:text">{{value}}</span>
+    <input
+      type="number"
+      class="value-input"
+      min="{{min}}"
+      max="{{max}}"
+      step="{{step}}"
+      value="{{value}}"
+      style="display:none"
+    />
+  </div>
+  <input
+    type="range"
+    class="slider"
+    min="{{min}}"
+    max="{{max}}"
+    step="{{step}}"
+    value="{{value}}"
+  />
+</div>

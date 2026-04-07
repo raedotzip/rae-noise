@@ -1,0 +1,19 @@
+<div class="layer-header">
+  <span class="layer-drag-handle" title="Drag to reorder">⠿</span>
+  <span class="layer-badge">{{layerNum}}</span>
+  <div class="layer-swatch" style="background:{{swatchGradient}}"></div>
+  <input
+    class="layer-name-input"
+    value="{{name}}"
+    placeholder="layer name"
+  />
+  <button class="layer-vis active" title="Toggle visibility">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  </button>
+  <span class="layer-toggle">▶</span>
+  <button class="layer-remove">✕</button>
+</div>
