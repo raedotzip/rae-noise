@@ -1,7 +1,3 @@
-// ══════════════════════════════════════════════════════════
-// WIDGET FACTORIES
-// ══════════════════════════════════════════════════════════
-
 import type { PaletteStop } from '../../src/types';
 import { makeInfoBtn } from './tooltip';
 import { rgbToHex, swatchGradient } from './color';

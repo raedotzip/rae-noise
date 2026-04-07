@@ -1,7 +1,3 @@
-// ══════════════════════════════════════════════════════════
-// MAIN — app entry point
-// ══════════════════════════════════════════════════════════
-
 import { createRenderer, defaultLayer } from '../../src/index';
 import type { PaletteStop } from '../../src/types';
 import { hexToRgb } from './color';

@@ -1,7 +1,3 @@
-// ══════════════════════════════════════════════════════════
-// LAYER CARD
-// ══════════════════════════════════════════════════════════
-
 import type { NoiseLayer, NoiseType, BlendMode, FlowType } from '../../src/types';
 import { swatchGradient } from './color';
 import {

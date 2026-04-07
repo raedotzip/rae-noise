@@ -1,7 +1,3 @@
-// ══════════════════════════════════════════════════════════
-// NODE GRAPH EDITOR
-// ══════════════════════════════════════════════════════════
-
 import type { NoiseLayer } from '../../src/types';
 import { rgbToHex } from './color';
 
