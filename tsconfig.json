@@ -2,16 +2,10 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "Bundler",
     "strict": true,
-    "declaration": true,
-    "declarationDir": "dist/types",
-    "outDir": "dist/esm",
-    "paths": {
-      "*.glsl": ["./src/types/glsl.d.ts"]
-    },
-    "typeRoots": ["./node_modules/@types"],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
     "resolveJsonModule": true
-  },
-  "include": ["src/**/*", "demo/**/*"]
+  }
 }

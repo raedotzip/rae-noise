@@ -1,0 +1,14 @@
+{
+  "entryPoints": ["packages/core/src/index.ts"],
+  "out": "docs",
+  "exclude": ["**/__tests__/**", "**/*.test.ts"],
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "excludeInternal": true,
+  "json": "docs/api.json",
+  "hideGenerator": true,
+  "intentionallyNotExported": ["NoiseRenderer"],
+  "theme": "default",
+  "tsconfig": "packages/core/tsconfig.json"
+}

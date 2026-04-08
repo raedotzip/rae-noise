@@ -1,0 +1,10 @@
+{
+  "extends": "./../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "paths": {
+      "rae-noise": ["../rae-noise/src/index.ts"]
+    }
+  },
+  "include": ["."]
+}
