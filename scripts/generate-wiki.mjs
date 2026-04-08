@@ -49,7 +49,7 @@ function renderInlineContent(part) {
   if (part.kind === "text") return part.text;
   if (part.kind === "code") return part.text;
   if (part.kind === "inline-tag" && part.tag === "@link") {
-    return `[${part.text}](API:-${part.text})`;
+    return `[${part.text}](API-${part.text})`;
   }
   return part.text || "";
 }
@@ -68,7 +68,7 @@ function typeToString(type) {
     case "tuple":
       return `[${type.elements.map(typeToString).join(", ")}]`;
     case "reference":
-      if (type.name) return `[${type.name}](API:-${type.name})`;
+      if (type.name) return `[${type.name}](API-${type.name})`;
       return "`unknown`";
     case "reflection": {
       const sig = type.declaration?.signatures?.[0];
@@ -147,12 +147,6 @@ function generateFunctionPage(node) {
 
 // --- main -------------------------------------------------------------------
 
-const apiDir = join(wikiDir, "api");
-if (existsSync(apiDir)) {
-  rmSync(apiDir, { recursive: true });
-}
-mkdirSync(apiDir, { recursive: true });
-
 const KIND_INTERFACE = 256;
 const KIND_TYPE_ALIAS = 2097152;
 const KIND_FUNCTION = 64;
@@ -166,15 +160,15 @@ for (const child of api.children || []) {
   switch (child.kind) {
     case KIND_INTERFACE:
       content = generateInterfacePage(child);
-      filename = `API:-${child.name}.md`;
+      filename = `API-${child.name}.md`;
       break;
     case KIND_TYPE_ALIAS:
       content = generateTypeAliasPage(child);
-      filename = `API:-${child.name}.md`;
+      filename = `API-${child.name}.md`;
       break;
     case KIND_FUNCTION:
       content = generateFunctionPage(child);
-      filename = `API:-${child.name}.md`;
+      filename = `API-${child.name}.md`;
       break;
     default:
       continue;
