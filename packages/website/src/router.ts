@@ -36,7 +36,9 @@ const routes: Record<string, { key: string; data: unknown }> = {
 // }
 
 export function renderRoute(path: string) {
-  const route = routes[path] ?? routes["/"];
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const normalised = base && path.startsWith(base) ? path.slice(base.length) || "/" : path;
+  const route = routes[normalised] ?? routes["/"];
   const template = templates[route.key] ?? templates.home;
   const app = document.getElementById("app");
   if (app) app.innerHTML = template(route.data);
