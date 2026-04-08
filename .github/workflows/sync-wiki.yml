@@ -1,13 +1,5 @@
 name: Sync API Docs to Wiki
 
-# ──────────────────────────────────────────────────────────────────────────────
-# This workflow generates TypeDoc API documentation from the core library and
-# pushes the output to this repository's GitHub wiki.
-#
-# It is DISABLED by default (workflow_dispatch only, no automatic triggers).
-# To enable automatic sync, uncomment the push trigger below.
-# ──────────────────────────────────────────────────────────────────────────────
-
 on:
   workflow_dispatch:
   push:
@@ -38,13 +30,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate API docs (JSON + HTML)
-        run: pnpm build:docs
-
-      - name: Copy JSON to website public dir
-        run: |
-          mkdir -p packages/website/public/api
-          cp docs/api.json packages/website/public/api/api.json
+      - name: Generate API docs
+        run: pnpm run build:docs
 
       - name: Checkout wiki
         uses: actions/checkout@v4
@@ -53,26 +40,8 @@ jobs:
           path: wiki
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sync docs to wiki
-        run: |
-          # Clear old wiki content (keep .git)
-          find wiki -maxdepth 1 -not -name '.git' -not -name 'wiki' -not -name 'Home.md' | xargs rm -rf 2>/dev/null || true
-
-          # Generate a wiki-friendly Home page
-          cat > wiki/Home.md << 'HOMEEOF'
-          # rae-noise API Reference
-
-          Auto-generated from source via [TypeDoc](https://typedoc.org/).
-          Last updated by CI — do not edit manually.
-
-          ## Modules
-
-          - [rae-noise](rae-noise.md)
-          HOMEEOF
-
-          # Copy the generated HTML docs into the wiki repo as reference
-          # The JSON is the canonical source for the website frontend
-          cp docs/api.json wiki/api.json
+      - name: Generate wiki pages from API docs
+        run: node scripts/generate-wiki.mjs wiki
 
       - name: Push to wiki
         working-directory: wiki
