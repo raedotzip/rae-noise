@@ -1,4 +1,4 @@
-// packages/core/rollup.config.ts
+// packages/core/rollup.config.mjs
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import resolve from "@rollup/plugin-node-resolve";

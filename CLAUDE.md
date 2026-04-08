@@ -68,7 +68,7 @@ pnpm lint             # Biome lint
 pnpm format           # Biome format (writes changes)
 pnpm check            # Biome check (lint + format, writes changes)
 pnpm typecheck        # TypeScript --noEmit across all packages
-pnpm docs             # Generate TypeDoc API docs
+pnpm build:docs       # Generate TypeDoc API docs
 pnpm changeset        # Create a changeset for version bumping
 ```
 
