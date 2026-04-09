@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRenderer } from "../src/shader/renderer";
+import { createRenderer } from "../src/renderer/renderer";
 import type { RaeNoiseRenderer } from "../src/types";
 
 describe("createRenderer", () => {
@@ -19,6 +19,9 @@ describe("createRenderer", () => {
     expect(typeof renderer.getLayers).toBe("function");
     expect(typeof renderer.destroy).toBe("function");
     expect(typeof renderer.reorderLayers).toBe("function");
+    expect(typeof renderer.exportConfig).toBe("function");
+    expect(typeof renderer.importConfig).toBe("function");
+    expect(typeof renderer.registerBackend).toBe("function");
   });
 
   it("starts with an empty layer stack", () => {
@@ -57,8 +60,21 @@ describe("addLayer", () => {
     const layers = renderer.getLayers();
     expect(layers[0].noiseType).toBe("worley");
     expect(layers[0].scale).toBe(7);
-    // Other properties should still have defaults
     expect(layers[0].speed).toBe(0.3);
+  });
+
+  it("defaults backend to noise when not specified", () => {
+    const canvas = document.createElement("canvas");
+    renderer = createRenderer(canvas);
+    renderer.addLayer();
+    expect(renderer.getLayers()[0].backend).toBe("noise");
+  });
+
+  it("sets visible to true by default", () => {
+    const canvas = document.createElement("canvas");
+    renderer = createRenderer(canvas);
+    renderer.addLayer();
+    expect(renderer.getLayers()[0].visible).toBe(true);
   });
 });
 
@@ -161,7 +177,7 @@ describe("reorderLayers", () => {
     renderer = createRenderer(canvas);
     const a = renderer.addLayer({ name: "A" });
     renderer.addLayer({ name: "B" });
-    renderer.reorderLayers([a]); // missing one id
+    renderer.reorderLayers([a]);
     const names = renderer.getLayers().map((l) => l.name);
     expect(names).toEqual(["A", "B"]);
   });
@@ -175,5 +191,56 @@ describe("destroy", () => {
     renderer.destroy();
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe("exportConfig / importConfig", () => {
+  let renderer: RaeNoiseRenderer;
+
+  afterEach(() => {
+    renderer?.destroy();
+  });
+
+  it("round-trips layer configs through JSON", () => {
+    const canvas = document.createElement("canvas");
+    renderer = createRenderer(canvas);
+    renderer.addLayer({ noiseType: "fbm", scale: 7, name: "test" });
+    renderer.addLayer({ noiseType: "worley", scale: 2 });
+
+    const config = renderer.exportConfig();
+    expect(config.version).toBe(1);
+    expect(config.layers).toHaveLength(2);
+
+    // Config layers should not have id
+    for (const l of config.layers) {
+      expect(l).not.toHaveProperty("id");
+    }
+
+    // Import into fresh renderer
+    const canvas2 = document.createElement("canvas");
+    const renderer2 = createRenderer(canvas2);
+    renderer2.importConfig(config);
+
+    const layers = renderer2.getLayers();
+    expect(layers).toHaveLength(2);
+    expect(layers[0].noiseType).toBe("fbm");
+    expect(layers[0].scale).toBe(7);
+    expect(layers[1].noiseType).toBe("worley");
+    renderer2.destroy();
+  });
+
+  it("survives JSON serialization round-trip", () => {
+    const canvas = document.createElement("canvas");
+    renderer = createRenderer(canvas);
+    renderer.addLayer({ noiseType: "curl", scale: 5 });
+
+    const json = JSON.stringify(renderer.exportConfig());
+    const parsed = JSON.parse(json);
+
+    const canvas2 = document.createElement("canvas");
+    const renderer2 = createRenderer(canvas2);
+    renderer2.importConfig(parsed);
+    expect(renderer2.getLayers()[0].noiseType).toBe("curl");
+    renderer2.destroy();
   });
 });

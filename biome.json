@@ -31,7 +31,14 @@
     }
   },
   "files": {
-    "include": ["packages/*/src/**", "packages/*/test/**", "packages/*/rollup.config.ts", "packages/*/vite.config.ts", "packages/*/vitest.config.ts", "packages/*/playwright.config.ts"],
+    "include": [
+      "packages/*/src/**",
+      "packages/*/test/**",
+      "packages/*/rollup.config.ts",
+      "packages/*/vite.config.ts",
+      "packages/*/vitest.config.ts",
+      "packages/*/playwright.config.ts"
+    ],
     "ignore": ["**/dist/**", "**/node_modules/**", "**/*.glsl"]
   }
 }

@@ -1,17 +1,17 @@
-import type { NoiseLayer } from 'rae-noise';
-import { rgbToHex } from './color';
+import type { NoiseLayer } from "rae-noise";
+import { rgbToHex } from "./color";
 
 interface GraphNode {
-  id:    string;
-  x:     number;
-  y:     number;
+  id: string;
+  x: number;
+  y: number;
   label: string;
   color: string;
 }
 
 interface GraphEdge {
   from: string;
-  to:   string;
+  to: string;
 }
 
 interface NodeGraphDeps {
@@ -21,12 +21,12 @@ interface NodeGraphDeps {
 }
 
 export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
-  const modalEl    = document.getElementById('nodeModal');
-  const closeBtnEl = document.getElementById('nodeModalClose');
-  const canvasEl   = document.getElementById('nodeCanvas') as HTMLCanvasElement | null;
-  if (!modalEl || !closeBtnEl || !canvasEl) throw new Error('Node graph elements not found');
-  const ctxEl      = canvasEl.getContext('2d');
-  if (!ctxEl) throw new Error('Canvas 2d context not available');
+  const modalEl = document.getElementById("nodeModal");
+  const closeBtnEl = document.getElementById("nodeModalClose");
+  const canvasEl = document.getElementById("nodeCanvas") as HTMLCanvasElement | null;
+  if (!modalEl || !closeBtnEl || !canvasEl) throw new Error("Node graph elements not found");
+  const ctxEl = canvasEl.getContext("2d");
+  if (!ctxEl) throw new Error("Canvas 2d context not available");
   const modal: HTMLElement = modalEl;
   const closeBtn: HTMLElement = closeBtnEl;
   const nodeCanvas: HTMLCanvasElement = canvasEl;
@@ -34,12 +34,12 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
 
   let nodes: GraphNode[] = [];
   let edges: GraphEdge[] = [];
-  let drag:       { id: string; ox: number; oy: number } | null = null;
+  let drag: { id: string; ox: number; oy: number } | null = null;
   let connecting: { fromId: string } | null = null;
 
   const NODE_W = 150;
   const NODE_H = 58;
-  const PORT_R  = 5;
+  const PORT_R = 5;
 
   // ── Sync from renderer ─────────────────────────────────
   function syncFromRenderer() {
@@ -47,15 +47,15 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
 
     for (let i = 0; i < layers.length; i++) {
       const l = layers[i];
-      const existing = nodes.find(n => n.id === l.id);
-      const midStop  = l.palette[Math.floor(l.palette.length / 2)];
-      const color    = midStop ? rgbToHex(midStop) : '#ffffff';
+      const existing = nodes.find((n) => n.id === l.id);
+      const midStop = l.palette[Math.floor(l.palette.length / 2)];
+      const color = midStop ? rgbToHex(midStop) : "#ffffff";
 
       if (!existing) {
         nodes.push({
-          id:    l.id,
-          x:     60 + (i % 4) * 190,
-          y:     60 + Math.floor(i / 4) * 140,
+          id: l.id,
+          x: 60 + (i % 4) * 190,
+          y: 60 + Math.floor(i / 4) * 140,
           label: l.name,
           color,
         });
@@ -65,9 +65,9 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
       }
     }
 
-    const liveIds = new Set(layers.map(l => l.id));
-    nodes = nodes.filter(n => liveIds.has(n.id));
-    edges = edges.filter(e => liveIds.has(e.from) && liveIds.has(e.to));
+    const liveIds = new Set(layers.map((l) => l.id));
+    nodes = nodes.filter((n) => liveIds.has(n.id));
+    edges = edges.filter((e) => liveIds.has(e.from) && liveIds.has(e.to));
 
     draw();
   }
@@ -75,40 +75,45 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
   function open() {
     syncFromRenderer();
     resize();
-    modal.classList.remove('hidden');
+    modal.classList.remove("hidden");
   }
 
   // ── Resize canvas to physical pixels ──────────────────
   function resize() {
     const dpr = devicePixelRatio || 1;
-    const w   = nodeCanvas.clientWidth;
-    const h   = nodeCanvas.clientHeight;
-    nodeCanvas.width  = w * dpr;
+    const w = nodeCanvas.clientWidth;
+    const h = nodeCanvas.clientHeight;
+    nodeCanvas.width = w * dpr;
     nodeCanvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw();
   }
 
   // ── Port positions ────────────────────────────────────
-  function portPos(node: GraphNode, side: 'in' | 'out'): [number, number] {
-    return side === 'in'
-      ? [node.x,          node.y + NODE_H / 2]
-      : [node.x + NODE_W, node.y + NODE_H / 2];
+  function portPos(node: GraphNode, side: "in" | "out"): [number, number] {
+    return side === "in" ? [node.x, node.y + NODE_H / 2] : [node.x + NODE_W, node.y + NODE_H / 2];
   }
 
   // ── Rounded rect helper ───────────────────────────────
   function roundRect(
     c: CanvasRenderingContext2D,
-    x: number, y: number, w: number, h: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
     r: number | [number, number, number, number]
   ) {
     const [tl, tr, br, bl] = Array.isArray(r) ? r : [r, r, r, r];
     c.beginPath();
     c.moveTo(x + tl, y);
-    c.lineTo(x + w - tr, y);       c.arcTo(x + w, y,     x + w, y + h, tr);
-    c.lineTo(x + w, y + h - br);   c.arcTo(x + w, y + h, x,     y + h, br);
-    c.lineTo(x + bl, y + h);       c.arcTo(x,     y + h, x,     y,     bl);
-    c.lineTo(x, y + tl);           c.arcTo(x,     y,     x + w, y,     tl);
+    c.lineTo(x + w - tr, y);
+    c.arcTo(x + w, y, x + w, y + h, tr);
+    c.lineTo(x + w, y + h - br);
+    c.arcTo(x + w, y + h, x, y + h, br);
+    c.lineTo(x + bl, y + h);
+    c.arcTo(x, y + h, x, y, bl);
+    c.lineTo(x, y + tl);
+    c.arcTo(x, y, x + w, y, tl);
     c.closePath();
   }
 
@@ -119,23 +124,29 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
     ctx.clearRect(0, 0, W, H);
 
     // Background grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.035)';
-    ctx.lineWidth   = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.035)";
+    ctx.lineWidth = 1;
     const GRID = 36;
     for (let x = 0; x < W; x += GRID) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
+      ctx.stroke();
     }
     for (let y = 0; y < H; y += GRID) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
     }
 
     // Edges
     for (const e of edges) {
-      const from = nodes.find(n => n.id === e.from);
-      const to   = nodes.find(n => n.id === e.to);
+      const from = nodes.find((n) => n.id === e.from);
+      const to = nodes.find((n) => n.id === e.to);
       if (!from || !to) continue;
-      const [fx, fy] = portPos(from, 'out');
-      const [tx, ty] = portPos(to,   'in');
+      const [fx, fy] = portPos(from, "out");
+      const [tx, ty] = portPos(to, "in");
       const cx = (fx + tx) / 2;
 
       const grad = ctx.createLinearGradient(fx, fy, tx, ty);
@@ -146,28 +157,30 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
       ctx.moveTo(fx, fy);
       ctx.bezierCurveTo(cx, fy, cx, ty, tx, ty);
       ctx.strokeStyle = grad;
-      ctx.lineWidth   = 1.5;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
     // Nodes
     for (const n of nodes) {
-      const layer = getRenderer().getLayers().find(l => l.id === n.id);
+      const layer = getRenderer()
+        .getLayers()
+        .find((l) => l.id === n.id);
 
-      ctx.shadowColor   = 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur    = 16;
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 16;
       ctx.shadowOffsetY = 4;
 
-      ctx.fillStyle = 'rgba(16, 16, 28, 0.94)';
+      ctx.fillStyle = "rgba(16, 16, 28, 0.94)";
       roundRect(ctx, n.x, n.y, NODE_W, NODE_H, 8);
       ctx.fill();
 
-      ctx.shadowColor   = 'transparent';
-      ctx.shadowBlur    = 0;
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
 
-      ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-      ctx.lineWidth   = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.14)";
+      ctx.lineWidth = 1;
       roundRect(ctx, n.x, n.y, NODE_W, NODE_H, 8);
       ctx.stroke();
 
@@ -175,24 +188,24 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
       roundRect(ctx, n.x, n.y, 4, NODE_H, [8, 0, 0, 8]);
       ctx.fill();
 
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.font      = '600 12px system-ui, sans-serif';
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.font = "600 12px system-ui, sans-serif";
       ctx.fillText(n.label, n.x + 14, n.y + 22, NODE_W - 20);
 
       if (layer) {
-        ctx.fillStyle = 'rgba(255,255,255,0.38)';
-        ctx.font      = '10px system-ui, sans-serif';
+        ctx.fillStyle = "rgba(255,255,255,0.38)";
+        ctx.font = "10px system-ui, sans-serif";
         ctx.fillText(`${layer.noiseType} · ${layer.flowType}`, n.x + 14, n.y + 38, NODE_W - 20);
       }
 
-      for (const side of ['in', 'out'] as const) {
+      for (const side of ["in", "out"] as const) {
         const [px, py] = portPos(n, side);
         ctx.beginPath();
         ctx.arc(px, py, PORT_R, 0, Math.PI * 2);
-        ctx.fillStyle   = 'rgba(255,255,255,0.10)';
+        ctx.fillStyle = "rgba(255,255,255,0.10)";
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.38)';
-        ctx.lineWidth   = 1;
+        ctx.strokeStyle = "rgba(255,255,255,0.38)";
+        ctx.lineWidth = 1;
         ctx.stroke();
       }
     }
@@ -200,14 +213,16 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
 
   // ── Hit testing ───────────────────────────────────────
   function hitNode(px: number, py: number): GraphNode | null {
-    return [...nodes].reverse().find(
-      n => px >= n.x && px <= n.x + NODE_W && py >= n.y && py <= n.y + NODE_H
-    ) ?? null;
+    return (
+      [...nodes]
+        .reverse()
+        .find((n) => px >= n.x && px <= n.x + NODE_W && py >= n.y && py <= n.y + NODE_H) ?? null
+    );
   }
 
-  function hitPort(px: number, py: number): { node: GraphNode; side: 'in' | 'out' } | null {
+  function hitPort(px: number, py: number): { node: GraphNode; side: "in" | "out" } | null {
     for (const n of nodes) {
-      for (const side of ['in', 'out'] as const) {
+      for (const side of ["in", "out"] as const) {
         const [px2, py2] = portPos(n, side);
         if (Math.hypot(px - px2, py - py2) < PORT_R + 6) return { node: n, side };
       }
@@ -221,7 +236,7 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
   }
 
   // ── Pointer events ────────────────────────────────────
-  nodeCanvas.addEventListener('mousedown', (e) => {
+  nodeCanvas.addEventListener("mousedown", (e) => {
     const [px, py] = toCanvas(e);
 
     const port = hitPort(px, py);
@@ -233,31 +248,35 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
     const n = hitNode(px, py);
     if (n) {
       drag = { id: n.id, ox: px - n.x, oy: py - n.y };
-      nodeCanvas.style.cursor = 'grabbing';
+      nodeCanvas.style.cursor = "grabbing";
     }
   });
 
-  nodeCanvas.addEventListener('mousemove', (e) => {
+  nodeCanvas.addEventListener("mousemove", (e) => {
     const [px, py] = toCanvas(e);
     if (drag) {
-      const n = nodes.find(n => n.id === drag?.id);
-      if (n) { n.x = px - drag.ox; n.y = py - drag.oy; draw(); }
+      const n = nodes.find((n) => n.id === drag?.id);
+      if (n) {
+        n.x = px - drag.ox;
+        n.y = py - drag.oy;
+        draw();
+      }
       return;
     }
     const port = hitPort(px, py);
     const node = hitNode(px, py);
-    nodeCanvas.style.cursor = port ? 'crosshair' : node ? 'grab' : 'default';
+    nodeCanvas.style.cursor = port ? "crosshair" : node ? "grab" : "default";
   });
 
-  nodeCanvas.addEventListener('mouseup', (e) => {
+  nodeCanvas.addEventListener("mouseup", (e) => {
     const [px, py] = toCanvas(e);
 
     if (connecting) {
       const port = hitPort(px, py);
       if (port && port.node.id !== connecting.fromId) {
         const from = connecting.fromId;
-        const to   = port.node.id;
-        const idx  = edges.findIndex(edge => edge.from === from && edge.to === to);
+        const to = port.node.id;
+        const idx = edges.findIndex((edge) => edge.from === from && edge.to === to);
         if (idx >= 0) edges.splice(idx, 1);
         else edges.push({ from, to });
         draw();
@@ -266,17 +285,17 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
     }
 
     drag = null;
-    nodeCanvas.style.cursor = 'default';
+    nodeCanvas.style.cursor = "default";
   });
 
   // Close modal
-  closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.classList.add('hidden');
+  closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.classList.add("hidden");
   });
 
   new ResizeObserver(() => {
-    if (!modal.classList.contains('hidden')) resize();
+    if (!modal.classList.contains("hidden")) resize();
   }).observe(nodeCanvas);
 
   return { open, syncFromRenderer };

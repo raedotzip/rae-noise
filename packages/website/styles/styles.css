@@ -18,3 +18,6 @@
 @import './features/dial.css';
 @import './features/modal.css';
 @import './features/drag.css';
+@import './features/toolbar.css';
+@import './features/config.css';
+@import './features/presets.css';

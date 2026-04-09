@@ -15,9 +15,9 @@ for (const path in modules) {
   if (path.includes("/partials/")) {
     // This logic ensures 'partials/ui/tooltip.hbs' becomes 'ui/tooltip'
     const name = path
-      .split("/partials/")[1]  // Get everything after /partials/
-      .replace(".hbs", "");    // Remove extension
-    
+      .split("/partials/")[1] // Get everything after /partials/
+      .replace(".hbs", ""); // Remove extension
+
     Handlebars.registerPartial(name, content);
   } else {
     // For main templates like app.hbs

@@ -24,8 +24,8 @@ for (const path in templateModules) {
 }
 
 const routes: Record<string, { key: string; data: unknown }> = {
-  "/":       { key: "demo",   data: {}   },
-  "/docs":   { key: "docs",   data: {}   },
+  "/": { key: "demo", data: {} },
+  "/docs": { key: "docs", data: {} },
 };
 
 // export function renderNav() {

@@ -95,8 +95,7 @@ export function makeSlider(
   const rangeEl = g.querySelector<HTMLInputElement>('input[type="range"]');
   const displayEl = g.querySelector<HTMLElement>(".value-display");
   const inputEl = g.querySelector<HTMLInputElement>(".value-input");
-  if (!rangeEl || !displayEl || !inputEl)
-    throw new Error(`Missing slider elements for "${label}"`);
+  if (!rangeEl || !displayEl || !inputEl) throw new Error(`Missing slider elements for "${label}"`);
   const rangeInput: HTMLInputElement = rangeEl;
   const valueDisplay: HTMLElement = displayEl;
   const valueInput: HTMLInputElement = inputEl;

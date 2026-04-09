@@ -16,6 +16,28 @@ function createWebGL2Mock(): Record<string, unknown> {
     FLOAT: 0x1406,
     TRIANGLE_STRIP: 0x0005,
     COLOR_BUFFER_BIT: 0x4000,
+    FRAMEBUFFER: 0x8d40,
+    COLOR_ATTACHMENT0: 0x8ce0,
+    TEXTURE_2D: 0x0de1,
+    TEXTURE0: 0x84c0,
+    TEXTURE1: 0x84c1,
+    RGBA: 0x1908,
+    UNSIGNED_BYTE: 0x1401,
+    TEXTURE_MIN_FILTER: 0x2801,
+    TEXTURE_MAG_FILTER: 0x2800,
+    TEXTURE_WRAP_S: 0x2802,
+    TEXTURE_WRAP_T: 0x2803,
+    LINEAR: 0x2601,
+    CLAMP_TO_EDGE: 0x812f,
+    FRAMEBUFFER_COMPLETE: 0x8cd5,
+    BLEND: 0x0be2,
+    ONE: 1,
+    ZERO: 0,
+    SRC_ALPHA: 0x0302,
+    ONE_MINUS_SRC_ALPHA: 0x0303,
+    ONE_MINUS_SRC_COLOR: 0x0301,
+    DST_COLOR: 0x0306,
+    FUNC_ADD: 0x8006,
   };
 
   let shaderCounter = 0;
@@ -56,6 +78,22 @@ function createWebGL2Mock(): Record<string, unknown> {
     clearColor: vi.fn(),
     clear: vi.fn(),
     drawArrays: vi.fn(),
+    // FBO / texture / blend support
+    createFramebuffer: () => ({}),
+    bindFramebuffer: vi.fn(),
+    deleteFramebuffer: vi.fn(),
+    createTexture: () => ({}),
+    bindTexture: vi.fn(),
+    deleteTexture: vi.fn(),
+    texImage2D: vi.fn(),
+    texParameteri: vi.fn(),
+    framebufferTexture2D: vi.fn(),
+    checkFramebufferStatus: () => 0x8cd5, // FRAMEBUFFER_COMPLETE
+    activeTexture: vi.fn(),
+    enable: vi.fn(),
+    disable: vi.fn(),
+    blendFunc: vi.fn(),
+    blendEquation: vi.fn(),
   };
 
   return gl;
@@ -63,11 +101,15 @@ function createWebGL2Mock(): Record<string, unknown> {
 
 // Patch HTMLCanvasElement to return our mock context
 const originalGetContext = HTMLCanvasElement.prototype.getContext;
-HTMLCanvasElement.prototype.getContext = function (contextId: string, ...args: unknown[]): any {
+(HTMLCanvasElement.prototype as { getContext: unknown }).getContext = function (
+  this: HTMLCanvasElement,
+  contextId: string,
+  ...args: unknown[]
+) {
   if (contextId === "webgl2") {
     return createWebGL2Mock() as unknown as WebGL2RenderingContext;
   }
-  return originalGetContext.call(this, contextId, ...args);
+  return originalGetContext.call(this, contextId as "2d", ...args);
 };
 
 // ── ResizeObserver stub (jsdom doesn't provide one) ──────
@@ -83,7 +125,6 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 // Use a synchronous stub so tests don't need real timers.
 let rafId = 0;
 globalThis.requestAnimationFrame = vi.fn((_cb: FrameRequestCallback) => {
-  // Do not auto-invoke — tests can call the callback manually if needed
   return ++rafId;
 });
 globalThis.cancelAnimationFrame = vi.fn();

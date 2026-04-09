@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { defaultLayer } from "../src/shader/renderer";
+import { defaultLayer } from "../src/renderer/defaults";
 
 describe("defaultLayer", () => {
   it("returns an object with all expected keys", () => {
     const layer = defaultLayer();
     const keys = [
       "name",
+      "backend",
       "noiseType",
       "scale",
       "octaves",
@@ -20,6 +21,7 @@ describe("defaultLayer", () => {
       "animate",
       "warp",
       "curlStrength",
+      "visible",
     ];
     for (const key of keys) {
       expect(layer).toHaveProperty(key);
@@ -33,6 +35,7 @@ describe("defaultLayer", () => {
 
   it("returns the documented default values", () => {
     const layer = defaultLayer();
+    expect(layer.backend).toBe("noise");
     expect(layer.noiseType).toBe("simplex");
     expect(layer.scale).toBe(3.0);
     expect(layer.octaves).toBe(4);
@@ -50,6 +53,7 @@ describe("defaultLayer", () => {
     expect(layer.animate).toBe(true);
     expect(layer.warp).toBe(0.0);
     expect(layer.curlStrength).toBe(0.0);
+    expect(layer.visible).toBe(true);
   });
 
   it("returns independent objects (no shared references)", () => {
@@ -59,7 +63,6 @@ describe("defaultLayer", () => {
     expect(a.palette).not.toBe(b.palette);
     expect(a.direction).not.toBe(b.direction);
 
-    // Mutating one should not affect the other
     a.palette.push([1, 0, 0]);
     expect(b.palette).toHaveLength(2);
   });

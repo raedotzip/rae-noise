@@ -1,6 +1,6 @@
 # rae-noise
 
-WebGL-powered procedural noise library for real-time visual effects on websites. Pre-release (not yet published to npm).
+WebGL-powered procedural visuals library for real-time effects on websites. Pre-release (not yet published to npm).
 
 **Author**: Raegan Scheet
 **Live demo**: https://raedotzip.github.io/rae-noise
@@ -14,40 +14,85 @@ pnpm workspace with two packages:
 
 ## Core library architecture
 
-The public API surface is small — two functions and six types:
+Modular, backend-driven renderer. Each visual type (noise, particles, lines, etc.) is a self-contained backend. The renderer orchestrates backends and composites their output via FBO ping-pong blending.
+
+### Public API
 
 ```
 createRenderer(canvas) → RaeNoiseRenderer
-defaultLayer()         → NoiseLayer
+defaultLayer()         → Omit<NoiseLayerConfig, 'id'>
 ```
 
-### Key files
+`RaeNoiseRenderer` methods: `addLayer`, `removeLayer`, `updateLayer`, `getLayers`, `reorderLayers`, `destroy`, `exportConfig`, `importConfig`, `registerBackend`.
 
-- `packages/core/src/index.ts` — Entry point, re-exports types + functions
-- `packages/core/src/types/index.d.ts` — All type definitions (NoiseLayer, RaeNoiseRenderer, NoiseType, BlendMode, FlowType, PaletteStop)
-- `packages/core/src/shader/renderer.ts` — `NoiseRenderer` class: manages WebGL2 context, compiles shaders, runs animation loop, uploads uniforms per frame
-- `packages/core/src/shader/builder.ts` — `buildFragShader(layers)`: dynamically generates GLSL fragment shader from active layer configs. Only includes noise chunks that are actually needed.
-- `packages/core/src/shader/chunks/` — GLSL shader fragments:
-  - `noise/simplex.glsl`, `noise/perlin.glsl`, `noise/worley.glsl`, `noise/fbm.glsl`, `noise/curl.glsl`
-  - `blend.glsl` (overlay blend), `warp.glsl` (domain warping), `utils.glsl`
+### Directory layout
+
+```
+packages/core/src/
+  index.ts                          # Public API re-exports
+  types/
+    index.d.ts                      # All type definitions
+    glsl.d.ts                       # GLSL module declarations
+  webgl/
+    program.ts                      # compileShader, linkProgram, UniformCache
+    quad.ts                         # Fullscreen quad VAO + vertex shader
+    fbo.ts                          # Framebuffer object wrapper
+  backend/
+    noise/
+      index.ts                      # NoiseBackend (implements Backend interface)
+      builder.ts                    # buildNoiseShader() — single-layer GLSL generation
+      chunks/                       # GLSL shader fragments
+        noise/simplex.glsl, perlin.glsl, worley.glsl, fbm.glsl, curl.glsl
+        blend.glsl, warp.glsl
+  compositor/
+    compositor.ts                   # FBO-based layer compositing + gamma pass
+    composite.glsl                  # Overlay blend helper for compositor
+  renderer/
+    renderer.ts                     # Renderer orchestrator class + createRenderer()
+    defaults.ts                     # defaultLayer()
+  config/
+    serializer.ts                   # JSON exportConfig / importConfig with validation
+```
 
 ### How rendering works
 
-1. `createRenderer()` initializes WebGL2, compiles vertex shader (static fullscreen quad), and starts `requestAnimationFrame` loop
-2. Each frame: uploads per-layer uniforms (time, scale, speed, direction, palette, etc.), then draws
-3. When layers are added/removed/reordered, a `dirty` flag triggers shader recompilation via `buildFragShader()`
-4. The fragment shader is generated dynamically — it conditionally includes only the GLSL chunks needed by the active layers' noise types, blend modes, and flow types
+1. `createRenderer()` initializes WebGL2, registers the built-in noise backend, creates the compositor, and starts a `requestAnimationFrame` loop
+2. Each visible layer is rendered to its own FBO by its backend (e.g., NoiseBackend draws a fullscreen quad with a per-layer noise shader)
+3. The compositor blends all layer FBOs together using GL blend state (add/multiply/screen) or a two-pass overlay shader, then applies a gamma correction pass to the canvas
+4. When a layer's structural config changes (noiseType, flowType, octaves, animate, warp, curlStrength), the backend recompiles only that layer's shader. Non-structural changes (speed, scale, palette, opacity, etc.) are uploaded as uniforms per-frame with no recompilation
 
-### NoiseLayer properties
+### Backend system
 
-Each layer has: `noiseType` (simplex/perlin/worley/fbm/curl), `scale`, `octaves` (1-8), `speed`, `direction` [x,y], `flowType` (linear/radial/spiral/vortex/turbulent), `contrast`, `brightness`, `palette` (up to 8 RGB stops), `opacity`, `blendMode` (add/multiply/screen/overlay), `animate`, `warp`, `curlStrength`.
+Backends implement the `Backend<L>` interface: `init`, `render`, `needsRecompile`, `recompile`, `removeLayer`, `destroy`. The noise backend is built-in. Custom backends are registered via `renderer.registerBackend(myBackend)`. Each backend owns its own shaders, geometry, and per-frame rendering logic. Adding a new visual type = one new backend file, zero changes to existing code.
+
+### Type system
+
+- `LayerBase` — shared fields: id, name, backend, opacity, blendMode, visible
+- `NoiseLayerConfig extends LayerBase` — noise-specific: noiseType, scale, octaves, speed, direction, flowType, contrast, brightness, palette, animate, warp, curlStrength
+- `Layer` — discriminated union of all layer configs (currently just NoiseLayerConfig)
+- `NoiseLayer` — deprecated alias for NoiseLayerConfig (backwards compat)
+- `Backend<L>` — interface for rendering backends
+- `RendererConfig` — serializable JSON format: `{ version, layers }` for export/import
+
+### JSON config export/import
+
+```ts
+const config = renderer.exportConfig(); // { version: 1, layers: [...] }
+const json = JSON.stringify(config);
+// Later, or in another project:
+renderer.importConfig(JSON.parse(json));
+```
+
+### NoiseLayerConfig properties
+
+Each noise layer has: `noiseType` (simplex/perlin/worley/fbm/curl), `scale`, `octaves` (1-8), `speed`, `direction` [x,y], `flowType` (linear/radial/spiral/vortex/turbulent), `contrast`, `brightness`, `palette` (up to 8 RGB stops), `opacity`, `blendMode` (add/multiply/screen/overlay), `animate`, `warp`, `curlStrength`, `visible`.
 
 ## Website architecture
 
 Vanilla TypeScript + Handlebars templates (no framework). Key files:
 
 - `packages/website/src/main.ts` — Entry point, inits demo + router
-- `packages/website/src/router.ts` — Client-side SPA routing (/ → demo, /docs → docs)
+- `packages/website/src/router.ts` — Client-side SPA routing (/ -> demo, /docs -> docs)
 - `packages/website/src/demo/index.ts` — Creates renderer, layer UI, wires controls
 - `packages/website/src/demo/layerCard.ts` — Layer card UI builder with all interactive controls
 - `packages/website/src/demo/widgets.ts` — Widget factories (slider, chip group, toggle, dial, palette editor)
@@ -62,14 +107,15 @@ Vanilla TypeScript + Handlebars templates (no framework). Key files:
 ```bash
 pnpm dev              # Rollup watch (core) + Vite dev server (website) concurrently
 pnpm build            # Build core then website
-pnpm build:core       # Rollup build → packages/core/dist/{esm,cjs}
-pnpm build:website    # Vite build → packages/website/dist/
+pnpm build:core       # Rollup build -> packages/core/dist/{esm,cjs}
+pnpm build:website    # Vite build -> packages/website/dist/
 pnpm lint             # Biome lint
 pnpm format           # Biome format (writes changes)
 pnpm check            # Biome check (lint + format, writes changes)
 pnpm typecheck        # TypeScript --noEmit across all packages
 pnpm build:docs       # Generate TypeDoc API docs
 pnpm changeset        # Create a changeset for version bumping
+pnpm test             # Run vitest tests
 ```
 
 ## Code style
@@ -77,13 +123,13 @@ pnpm changeset        # Create a changeset for version bumping
 - **Formatter/Linter**: Biome — 2-space indent, double quotes, ES5 trailing commas, always semicolons, 100-char line width
 - **TypeScript**: Strict mode, ES2020 target, ESNext modules, Bundler module resolution
 - Biome scope: `packages/*/src/**` + config files. GLSL files are excluded from biome.
-- No test framework wired up yet (vitest + playwright deps exist but no tests written)
+- Tests: vitest with happy-dom, setup file mocks WebGL2/RAF/ResizeObserver
 
 ## Build tooling
 
 - **pnpm 9** — Monorepo package manager
 - **Rollup 4** — Core library bundler (ESM + CJS outputs, GLSL inlined via rollup-plugin-glsl)
-- **Vite 6** — Website dev server + bundler (aliases `rae-noise` to local core source for hot-reload)
+- **Vite 6** — Website dev server + bundler (aliases `rae-noise` to local core source for hot-reload, `base: "/rae-noise/"` for GitHub Pages)
 - **TypeDoc** — API documentation generation
 - **Changesets** — Semantic versioning and release management
 
@@ -91,11 +137,13 @@ pnpm changeset        # Create a changeset for version bumping
 
 - **continuous-integration.yml** — Runs on PRs: lint, typecheck, build core, generate docs, build website
 - **deploy-website.yml** — Runs on push to main: builds and deploys website to GitHub Pages
+- **sync-wiki.yml** — Runs on push to main: generates API docs wiki pages from TypeDoc JSON
 - **npm-release.yml** — Manual dispatch: Changesets-based npm publish (gated by `NPM_PUBLISH_READY` variable, not yet enabled)
 
 ## Current project state
 
 - npm package not yet published — awaiting 1.0 release
-- No tests written yet (vitest/playwright configured but unused)
-- Active development: recent refactoring moved demo code into monorepo structure, adopted Handlebars templates
+- Backend architecture implemented: modular system supports custom visual backends
+- Tests written: vitest unit tests for renderer, builder, defaults, serializer (48 tests)
+- Active development: demo live on GitHub Pages
 - README notes project is not ready for external pull requests

@@ -1,0 +1,16 @@
+<div id="configModal" class="modal-backdrop hidden">
+  <div class="modal-panel modal-panel-sm">
+    <div class="modal-header">
+      <span class="modal-title" id="configModalTitle">export config</span>
+      <button id="configModalClose" class="modal-close">✕</button>
+    </div>
+    <div class="config-modal-body">
+      <textarea id="configTextarea" spellcheck="false" placeholder="Paste JSON config here..."></textarea>
+      <div class="config-actions">
+        <button id="configCopyBtn" class="config-action-btn">copy to clipboard</button>
+        <button id="configApplyBtn" class="config-action-btn config-action-primary hidden">apply config</button>
+      </div>
+      <div id="configStatus" class="config-status"></div>
+    </div>
+  </div>
+</div>

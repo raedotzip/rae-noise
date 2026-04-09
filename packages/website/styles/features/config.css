@@ -1,0 +1,84 @@
+.modal-panel-sm {
+  width: min(560px, 90vw);
+  height: auto;
+  max-height: min(520px, 80vh);
+}
+
+.config-modal-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#configTextarea {
+  width: 100%;
+  height: 260px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  padding: 12px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#configTextarea:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+#configTextarea::placeholder {
+  color: var(--text-dim);
+}
+
+.config-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.config-action-btn {
+  flex: 1;
+  padding: 10px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.config-action-btn:hover {
+  background: var(--glass-hover);
+  transform: translateY(-1px);
+}
+
+.config-action-primary {
+  background: rgba(100, 200, 255, 0.12);
+  border-color: rgba(100, 200, 255, 0.25);
+}
+
+.config-action-primary:hover {
+  background: rgba(100, 200, 255, 0.2);
+}
+
+.config-status {
+  font-size: 0.65rem;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  min-height: 1.2em;
+}
+
+.config-status-ok {
+  color: rgba(100, 255, 160, 0.9);
+}
+
+.config-status-err {
+  color: rgba(255, 100, 100, 0.9);
+}

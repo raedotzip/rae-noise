@@ -1,5 +1,5 @@
-import './views';
-import initDemo from './demo';
+import "./views";
+import initDemo from "./demo";
 import { renderRoute } from "./router";
 import "./../styles/styles.css";
 

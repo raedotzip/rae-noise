@@ -1,6 +1,4 @@
 {
   "siteName": "RaeNoise",
-  "links": [
-    { "label": "home",   "href": "/"       }
-  ]
+  "links": [{ "label": "home", "href": "/" }]
 }

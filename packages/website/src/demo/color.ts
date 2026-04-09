@@ -1,4 +1,4 @@
-import type { PaletteStop } from 'rae-noise';
+import type { PaletteStop } from "rae-noise";
 
 export function hexToRgb(hex: string): PaletteStop {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -6,7 +6,10 @@ export function hexToRgb(hex: string): PaletteStop {
 }
 
 export function rgbToHex([r, g, b]: PaletteStop): string {
-  const c = (x: number) => Math.round(x * 255).toString(16).padStart(2, '0');
+  const c = (x: number) =>
+    Math.round(x * 255)
+      .toString(16)
+      .padStart(2, "0");
   return `#${c(r)}${c(g)}${c(b)}`;
 }
 
@@ -17,7 +20,7 @@ export function swatchGradient(palette: PaletteStop[]): string {
   }
   const stops = palette.map((s, i) => {
     const pct = (i / (palette.length - 1)) * 100;
-    return `rgb(${s.map((x: number) => Math.round(x * 255)).join(',')}) ${pct}%`;
+    return `rgb(${s.map((x: number) => Math.round(x * 255)).join(",")}) ${pct}%`;
   });
-  return `linear-gradient(to right, ${stops.join(', ')})`;
+  return `linear-gradient(to right, ${stops.join(", ")})`;
 }
