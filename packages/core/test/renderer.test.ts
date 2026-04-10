@@ -211,12 +211,14 @@ describe("exportConfig / importConfig", () => {
     expect(config.version).toBe(1);
     expect(config.layers).toHaveLength(2);
 
-    // Config layers should not have id
-    for (const l of config.layers) {
-      expect(l).not.toHaveProperty("id");
+    // Envelope entries have a backend field and an opaque `data` blob.
+    for (const entry of config.layers) {
+      expect(entry.backend).toBe("noise");
+      expect(entry.data).toBeDefined();
     }
 
-    // Import into fresh renderer
+    // Import into fresh renderer — fresh ids are allocated, original
+    // backend-specific fields come back through the `data` blob.
     const canvas2 = document.createElement("canvas");
     const renderer2 = createRenderer(canvas2);
     renderer2.importConfig(config);

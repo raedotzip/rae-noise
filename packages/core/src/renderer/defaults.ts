@@ -58,5 +58,12 @@ export function defaultLayer(): Omit<NoiseLayerConfig, "id"> {
     warp: 0.0,
     curlStrength: 0.0,
     visible: true,
+    parent: null,
+    transform: {
+      position: [0, 0],
+      rotation: 0,
+      scale: [1, 1],
+      anchor: [0.5, 0.5],
+    },
   };
 }

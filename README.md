@@ -43,28 +43,57 @@ const layerId = renderer.addLayer({
 
 ---
 
-## Monorepo structure
+## Repository layout
+
+This is a pnpm workspace with two packages: the published library and the demo site that drives its development.
 
 ```
 rae-noise/
 ├── packages/
-│   ├── core/          # rae-noise — the npm package
+│   ├── core/                   # rae-noise — the npm package
 │   │   ├── src/
-│   │   │   ├── index.ts
-│   │   │   └── shader/
+│   │   │   ├── index.ts        # public API re-exports
+│   │   │   ├── types/          # type definitions (Backend, Layer, RendererConfig, …)
+│   │   │   ├── webgl/          # low-level WebGL2 primitives (program, quad, FBO)
+│   │   │   ├── backend/        # self-contained visual backends
+│   │   │   │   └── noise/      # built-in noise backend: shaders, builder, chunks
+│   │   │   │       └── chunks/ # GLSL fragments (simplex, perlin, worley, fbm, curl, …)
+│   │   │   ├── compositor/     # FBO ping-pong blending + gamma pass
+│   │   │   ├── compiler/       # design-time → production-time scene compiler
+│   │   │   ├── config/         # JSON envelope serializer (exportConfig / importConfig)
+│   │   │   └── renderer/       # Renderer orchestrator, defaults, scene graph resolver
+│   │   ├── test/               # vitest unit tests
+│   │   ├── docs/               # authoring guides (e.g. adding-a-backend.md)
 │   │   └── rollup.config.ts
-│   └── website/       # demo site
+│   └── website/                # demo site — vanilla TS + Handlebars, deployed to Pages
 │       ├── src/
+│       │   ├── demo/           # editor UI, layer cards, widgets, node graph
+│       │   ├── views/          # Handlebars templates + partials
+│       │   └── styles/         # CSS organized into base/components/features/layout
 │       └── vite.config.ts
-├── .changeset/        # pending release notes
+├── .changeset/                 # pending release notes
 ├── .github/
-│   ├── workflows/
-│   │   ├── continuous-integration.yml # runs on every PR
-│   │   ├── deploy-website.yml         # deploys to GitHub Pages on push to main
-│   │   └── npm-release.yml            # publishes to npm (disabled until 1.0)
-│   └── dependabot.yml
+│   └── workflows/
+│       ├── continuous-integration.yml  # lint, typecheck, build on every PR
+│       ├── deploy-website.yml          # deploys to GitHub Pages on push to main
+│       ├── sync-wiki.yml               # generates API docs wiki from TypeDoc
+│       └── npm-release.yml             # changesets-gated npm publish (disabled until 1.0)
 └── pnpm-workspace.yaml
 ```
+
+### How the core library is organized
+
+The renderer is **backend-driven**: each visual type (noise today, particles and sprites later) is a self-contained module under `src/backend/` that owns its own shaders, per-layer GPU state, config schema, and compiled output. Adding a new visual type is one new backend file with zero changes to shared code — see [`packages/core/docs/adding-a-backend.md`](./packages/core/docs/adding-a-backend.md).
+
+| Area | Purpose |
+| --- | --- |
+| `types/` | The `Backend<L>` interface, layer types, `Transform2D` / `WorldTransform`, `RendererConfig` envelope, `CompiledScene`. |
+| `webgl/` | Thin wrappers over WebGL2: shader compilation, uniform caching, fullscreen quad, FBO. |
+| `backend/noise/` | The built-in noise backend. `builder.ts` assembles a fragment shader from GLSL chunks per layer config; `index.ts` implements the `Backend` interface (render, serialize, deserialize, compile). |
+| `compositor/` | FBO-per-layer ping-pong blending with a two-pass overlay fallback and a final gamma correction pass. |
+| `compiler/` | Walks the layer stack at design-time and asks each backend to `compile` its layers into a `CompiledScene` the minimal production runtime can replay. |
+| `config/` | JSON export/import using a per-backend envelope format — the serializer doesn't know what a noise layer looks like, it delegates to `backend.serialize` / `backend.deserialize`. |
+| `renderer/` | The `Renderer` class, default layer factory, and `resolveWorldTransforms` for the Unity-style parent/child scene graph. |
 
 ---
 

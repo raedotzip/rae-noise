@@ -1,38 +1,58 @@
 import { describe, expect, it } from "vitest";
+import { NoiseBackend } from "../src/backend/noise/index";
 import { exportConfig, importConfig } from "../src/config/serializer";
 import { defaultLayer } from "../src/renderer/defaults";
-import type { NoiseLayerConfig } from "../src/types";
+import type { Backend, BackendType, LayerEntry, NoiseLayerConfig } from "../src/types";
 
 function layer(overrides: Partial<NoiseLayerConfig> = {}): NoiseLayerConfig {
   return { ...defaultLayer(), id: "test-id", ...overrides } as NoiseLayerConfig;
 }
 
+function backends(): Map<BackendType, Backend> {
+  // NoiseBackend's serialize/deserialize are pure and don't touch GL.
+  return new Map<BackendType, Backend>([["noise", new NoiseBackend() as unknown as Backend]]);
+}
+
 describe("exportConfig", () => {
   it("returns version 1 with layer data", () => {
-    const config = exportConfig([layer({ noiseType: "fbm" })]);
+    const config = exportConfig([layer({ noiseType: "fbm" })], backends());
     expect(config.version).toBe(1);
     expect(config.layers).toHaveLength(1);
   });
 
-  it("strips the id field from layers", () => {
-    const config = exportConfig([layer()]);
-    expect(config.layers[0]).not.toHaveProperty("id");
+  it("wraps backend-specific data in the `data` blob", () => {
+    const config = exportConfig([layer({ noiseType: "worley", scale: 9 })], backends());
+    const entry = config.layers[0];
+    expect(entry.backend).toBe("noise");
+    expect(entry.bv).toBe(1);
+    const data = entry.data as { noiseType: string; scale: number };
+    expect(data.noiseType).toBe("worley");
+    expect(data.scale).toBe(9);
   });
 
-  it("preserves all other layer properties", () => {
-    const config = exportConfig([layer({ noiseType: "worley", scale: 9 })]);
-    const l = config.layers[0] as Partial<NoiseLayerConfig>;
-    expect(l.noiseType).toBe("worley");
-    expect(l.scale).toBe(9);
-    expect(l.backend).toBe("noise");
+  it("stores shared fields on the envelope, not inside data", () => {
+    const config = exportConfig(
+      [layer({ opacity: 0.5, blendMode: "screen", name: "bg" })],
+      backends()
+    );
+    const entry = config.layers[0];
+    expect(entry.opacity).toBe(0.5);
+    expect(entry.blendMode).toBe("screen");
+    expect(entry.name).toBe("bg");
   });
 });
 
 describe("importConfig", () => {
-  it("accepts a valid config", () => {
+  it("accepts a valid envelope config", () => {
     const config = importConfig({
       version: 1,
-      layers: [{ ...defaultLayer() }],
+      layers: [
+        {
+          backend: "noise",
+          bv: 1,
+          data: { noiseType: "simplex", scale: 3 },
+        },
+      ],
     });
     expect(config.version).toBe(1);
     expect(config.layers).toHaveLength(1);
@@ -51,19 +71,34 @@ describe("importConfig", () => {
     expect(() => importConfig({ version: 1 })).toThrow("layers");
   });
 
-  it("defaults backend to noise for layers without one", () => {
+  it("throws when a layer entry is missing its backend field", () => {
+    expect(() =>
+      importConfig({
+        version: 1,
+        layers: [{ bv: 1, data: {} }],
+      })
+    ).toThrow("backend");
+  });
+
+  it("defaults bv to 1 when absent", () => {
     const config = importConfig({
       version: 1,
-      layers: [{ noiseType: "simplex", scale: 3 }],
+      layers: [{ backend: "noise", data: {} }],
     });
-    expect((config.layers[0] as Record<string, unknown>).backend).toBe("noise");
+    expect((config.layers[0] as LayerEntry).bv).toBe(1);
   });
 
   it("round-trips through JSON.stringify/parse", () => {
-    const original = exportConfig([layer({ noiseType: "curl", scale: 5, name: "test" })]);
+    const original = exportConfig(
+      [layer({ noiseType: "curl", scale: 5, name: "test" })],
+      backends()
+    );
     const json = JSON.stringify(original);
     const restored = importConfig(JSON.parse(json));
     expect(restored.layers).toHaveLength(1);
-    expect((restored.layers[0] as Partial<NoiseLayerConfig>).noiseType).toBe("curl");
+    const entry = restored.layers[0];
+    expect(entry.backend).toBe("noise");
+    const data = entry.data as { noiseType: string };
+    expect(data.noiseType).toBe("curl");
   });
 });

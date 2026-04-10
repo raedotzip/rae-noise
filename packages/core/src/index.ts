@@ -62,8 +62,16 @@ export type {
   Backend,
   BackendType,
   RendererConfig,
+  LayerEntry,
+  Transform2D,
+  WorldTransform,
+  CompiledLayer,
+  CompiledScene,
+  ExposedParam,
 } from "./types";
 
 // Functions
 export { createRenderer } from "./renderer/renderer";
 export { defaultLayer } from "./renderer/defaults";
+export { compile } from "./compiler/compile";
+export { resolveWorldTransforms, identityTransform } from "./renderer/sceneGraph";

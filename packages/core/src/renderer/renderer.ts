@@ -1,15 +1,20 @@
 import { NoiseBackend } from "../backend/noise/index";
+import { compile as compileScene } from "../compiler/compile";
 import { Compositor } from "../compositor/compositor";
-import { exportConfig, importConfig } from "../config/serializer";
+import { exportConfig, hydrateLayer, importConfig } from "../config/serializer";
 import type {
   Backend,
   BackendType,
+  CompiledScene,
   Layer,
   NoiseLayerConfig,
   RaeNoiseRenderer,
   RendererConfig,
+  Transform2D,
+  WorldTransform,
 } from "../types";
 import { defaultLayer } from "./defaults";
+import { identityTransform, resolveWorldTransforms } from "./sceneGraph";
 
 /**
  * Core renderer orchestrator. Manages a stack of {@link Layer}s, delegates
@@ -67,13 +72,22 @@ export class Renderer implements RaeNoiseRenderer {
 
     let layer: Layer;
     if (backend === "noise") {
-      layer = { ...defaultLayer(), ...partial, id, backend: "noise" } as NoiseLayerConfig;
+      layer = {
+        ...defaultLayer(),
+        parent: null,
+        transform: identityTransform(),
+        ...partial,
+        id,
+        backend: "noise",
+      } as NoiseLayerConfig;
     } else {
       layer = {
         name: "layer",
         opacity: 1.0,
         blendMode: "add" as const,
         visible: true,
+        parent: null,
+        transform: identityTransform(),
         ...partial,
         id,
         backend,
@@ -83,6 +97,42 @@ export class Renderer implements RaeNoiseRenderer {
     this.layers.push(layer);
     this.dirty.add(id);
     return id;
+  }
+
+  /**
+   * Reparents a layer within the scene graph. Passing `null` detaches the
+   * layer so its transform is resolved directly against the canvas.
+   *
+   * Cycles are rejected — you cannot make a layer a descendant of itself.
+   */
+  setParent(id: string, parentId: string | null): void {
+    const layer = this.layers.find((l) => l.id === id);
+    if (!layer) return;
+
+    if (parentId != null) {
+      // Walk up from parentId; if we hit `id`, we'd form a cycle.
+      let cursor: string | null = parentId;
+      while (cursor != null) {
+        if (cursor === id) {
+          throw new Error(`setParent: would create a cycle (${id} -> ${parentId})`);
+        }
+        const next: Layer | undefined = this.layers.find((l) => l.id === cursor);
+        cursor = next?.parent ?? null;
+      }
+    }
+
+    layer.parent = parentId;
+  }
+
+  /**
+   * Patches a layer's local {@link Transform2D}. Does not trigger a
+   * shader recompile — transforms are per-frame state.
+   */
+  setTransform(id: string, patch: Partial<Transform2D>): void {
+    const layer = this.layers.find((l) => l.id === id);
+    if (!layer) return;
+    const current = layer.transform ?? identityTransform();
+    layer.transform = { ...current, ...patch };
   }
 
   removeLayer(id: string): void {
@@ -106,7 +156,8 @@ export class Renderer implements RaeNoiseRenderer {
     const next = { ...prev, ...patch } as Layer;
     this.layers[idx] = next;
 
-    const backend = this.backends.get(next.backend);
+    // biome-ignore lint/suspicious/noExplicitAny: backend lookup is dynamic
+    const backend = this.backends.get(next.backend) as Backend<any> | undefined;
     if (backend?.needsRecompile(prev, next)) {
       this.dirty.add(id);
     }
@@ -125,7 +176,18 @@ export class Renderer implements RaeNoiseRenderer {
   }
 
   exportConfig(): RendererConfig {
-    return exportConfig(this.layers);
+    return exportConfig(this.layers, this.backends);
+  }
+
+  /**
+   * Compile the current layer stack to a {@link CompiledScene} for the
+   * minimal production runtime. This is the design-time → production-time
+   * handoff: the compiled scene contains baked shader source and frozen
+   * uniform tables, and does not depend on any backend code, shader
+   * builder, or validator at runtime.
+   */
+  compile(): CompiledScene {
+    return compileScene(this.layers, this.backends);
   }
 
   importConfig(config: RendererConfig): void {
@@ -136,9 +198,30 @@ export class Renderer implements RaeNoiseRenderer {
       this.removeLayer(l.id);
     }
 
-    // Add imported layers
-    for (const layerConfig of validated.layers) {
-      this.addLayer(layerConfig);
+    // The envelope stores parent ids from the exporting session. Allocate
+    // fresh ids on import and remap parents using an old-id → new-id map.
+    // Parent ids that can't be resolved (e.g., orphaned references) are
+    // dropped silently; layers without a parent stay parentless.
+    const idMap = new Map<string | null | undefined, string | null>();
+    idMap.set(null, null);
+    idMap.set(undefined, null);
+
+    const added: Layer[] = [];
+    for (const entry of validated.layers) {
+      const newId = crypto.randomUUID();
+      if (typeof entry.id === "string") idMap.set(entry.id, newId);
+
+      const layer = hydrateLayer(entry, this.backends, newId);
+      this.layers.push(layer);
+      this.dirty.add(newId);
+      added.push(layer);
+    }
+
+    // Second pass: remap parent references.
+    for (const layer of added) {
+      if (layer.parent != null) {
+        layer.parent = idMap.get(layer.parent) ?? null;
+      }
     }
   }
 
@@ -176,7 +259,8 @@ export class Renderer implements RaeNoiseRenderer {
       const layer = this.layers.find((l) => l.id === id);
       if (!layer) continue;
 
-      const backend = this.backends.get(layer.backend);
+      // biome-ignore lint/suspicious/noExplicitAny: backend lookup is dynamic
+      const backend = this.backends.get(layer.backend) as Backend<any> | undefined;
       if (!backend) {
         console.warn(`No backend registered for type "${layer.backend}"`);
         continue;
@@ -211,11 +295,19 @@ export class Renderer implements RaeNoiseRenderer {
         return;
       }
 
+      // Resolve the scene graph once per frame: every layer gets a
+      // world-space transform composed from its local transform and its
+      // ancestors. Backends that fill the whole canvas (noise) can
+      // ignore it; backends that care about placement (sprites,
+      // particles) use it to position their draw calls.
+      const worldTransforms = resolveWorldTransforms(this.layers);
+
       // Render each visible layer to its own FBO
       for (const layer of this.layers) {
         if (layer.visible === false) continue;
 
-        const backend = this.backends.get(layer.backend);
+        // biome-ignore lint/suspicious/noExplicitAny: backend lookup is dynamic
+        const backend = this.backends.get(layer.backend) as Backend<any> | undefined;
         if (!backend) continue;
 
         const fbo = this.compositor.ensureFBO(layer.id, w, h);
@@ -224,7 +316,8 @@ export class Renderer implements RaeNoiseRenderer {
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        backend.render(layer, secs, w, h);
+        const world = worldTransforms.get(layer.id) as WorldTransform;
+        backend.render(layer, secs, w, h, world);
         fbo.unbind();
       }
 
