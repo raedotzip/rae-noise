@@ -6,3 +6,15 @@ html, body {
   color: var(--text);
   font-family: var(--ui);
 }
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Home page needs scrolling */
+#app:has(.home) {
+  overflow-y: auto;
+}

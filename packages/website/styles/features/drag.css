@@ -17,15 +17,15 @@
   cursor: grabbing;
 }
 
-.layer-card.drag-over-top {
+.hierarchy-item.drag-over-top {
   border-top: 2px solid rgba(255,255,255,0.5);
 }
 
-.layer-card.drag-over-bottom {
+.hierarchy-item.drag-over-bottom {
   border-bottom: 2px solid rgba(255,255,255,0.5);
 }
 
-.layer-card.dragging {
+.hierarchy-item.dragging {
   opacity: 0.35;
   pointer-events: none;
 }

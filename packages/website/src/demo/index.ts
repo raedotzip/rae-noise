@@ -1,15 +1,12 @@
 import { type PaletteStop, createRenderer, defaultLayer } from "rae-noise";
-import { makeLayerCard } from "./layerCard";
+import { makeHierarchyItem, populateInspector } from "./layerCard";
+import type { LayerCardDeps } from "./layerCard";
 import { createNodeGraph } from "./nodeGraph";
 import { presets } from "./presets";
 
 export default function initDemo() {
-  // ── Initialize renderer AFTER route/template is rendered ──
   const canvas = document.getElementById("glCanvas") as HTMLCanvasElement | null;
-  if (!canvas) {
-    console.error('Canvas element with id "glCanvas" not found in the current route!');
-    return;
-  }
+  if (!canvas) return;
 
   const renderer = createRenderer(canvas);
 
@@ -21,11 +18,10 @@ export default function initDemo() {
     };
   }
 
-  // Layer list
-  const layerList = document.getElementById("layerList");
-  if (!layerList) {
-    console.warn("Layer list element not found; skipping layer UI setup.");
-  }
+  // Panels
+  const layerListEl = document.getElementById("layerList");
+  if (!layerListEl) return;
+  const layerList: HTMLElement = layerListEl;;
 
   // Node graph
   const nodeGraph = createNodeGraph({ getRenderer: () => renderer });
@@ -34,11 +30,45 @@ export default function initDemo() {
     openNodeGraphBtn.addEventListener("click", () => nodeGraph.open());
   }
 
-  // ── Layer management helpers ──────────────────────────────
+  // ── Selection state ─────────────────────────────────────
+  let selectedId: string | null = null;
+
+  function selectLayer(id: string) {
+    selectedId = id;
+    // Update hierarchy highlight
+    for (const el of layerList.querySelectorAll(".hierarchy-item")) {
+      el.classList.toggle("selected", el.getAttribute("data-id") === id);
+    }
+    // Populate inspector
+    populateInspector(id, deps);
+  }
+
+  function clearInspector() {
+    selectedId = null;
+    const container = document.getElementById("inspectorContent");
+    if (container) {
+      container.innerHTML = '<div class="inspector-empty"><p>select a layer to inspect</p></div>';
+    }
+    for (const el of layerList.querySelectorAll(".hierarchy-item")) {
+      el.classList.remove("selected");
+    }
+  }
+
+  // ── Shared deps passed to hierarchy items + inspector ──
+  const deps: LayerCardDeps = {
+    layerList,
+    renderer,
+    onSync: () => nodeGraph.syncFromRenderer(),
+    onSelect: selectLayer,
+    onRemove: (id: string) => {
+      if (selectedId === id) clearInspector();
+    },
+  };
+
+  // ── Layer management helpers ────────────────────────────
   let layerCount = 0;
 
   function addLayerWithCard(partial: Partial<Parameters<typeof renderer.addLayer>[0]> = {}) {
-    if (!layerList) return;
     layerCount++;
 
     const hue = Math.random();
@@ -58,37 +88,37 @@ export default function initDemo() {
       palette: starterPalette,
     });
 
-    const card = makeLayerCard(id, layerCount, {
-      layerList,
-      renderer,
-      onSync: () => nodeGraph.syncFromRenderer(),
-    });
-
-    layerList.prepend(card);
+    const item = makeHierarchyItem(id, layerCount, deps);
+    layerList.prepend(item);
     nodeGraph.syncFromRenderer();
+
+    // Auto-select the newly added layer
+    selectLayer(id);
+    return id;
   }
 
   function clearAllLayers() {
     for (const layer of renderer.getLayers()) {
       renderer.removeLayer(layer.id);
     }
-    if (layerList) layerList.innerHTML = "";
+    layerList.innerHTML = "";
     layerCount = 0;
+    clearInspector();
     nodeGraph.syncFromRenderer();
   }
 
-  // ── Add layer button ──────────────────────────────────────
+  // ── Add layer button ──────────────────────────────────
   const addLayerBtn = document.getElementById("addLayerBtn");
-  if (addLayerBtn && layerList) {
+  if (addLayerBtn) {
     addLayerBtn.addEventListener("click", () => addLayerWithCard());
   }
 
-  // ── Randomize button ──────────────────────────────────────
+  // ── Randomize button ──────────────────────────────────
   const randomizeBtn = document.getElementById("randomizeBtn");
-  if (randomizeBtn && layerList) {
+  if (randomizeBtn) {
     randomizeBtn.addEventListener("click", () => {
       clearAllLayers();
-      const count = 2 + Math.floor(Math.random() * 2); // 2-3 layers
+      const count = 2 + Math.floor(Math.random() * 2);
       const noiseTypes = ["simplex", "perlin", "worley", "fbm", "curl"] as const;
       const blendModes = ["add", "screen", "multiply", "overlay"] as const;
       const flowTypes = ["linear", "radial", "spiral", "vortex", "turbulent"] as const;
@@ -105,7 +135,6 @@ export default function initDemo() {
             Math.abs(Math.sin((hue + t) * 6.28 + 4)) * 0.8 + Math.random() * 0.2,
           ]);
         }
-        // First stop dark for depth
         if (i === 0) palette[0] = [0, 0, 0];
 
         addLayerWithCard({
@@ -127,7 +156,7 @@ export default function initDemo() {
     });
   }
 
-  // ── Export / Import config ────────────────────────────────
+  // ── Export / Import config ──────────────────────────────
   const configModal = document.getElementById("configModal");
   const configTextarea = document.getElementById("configTextarea") as HTMLTextAreaElement | null;
   const configCopyBtn = document.getElementById("configCopyBtn");
@@ -197,17 +226,10 @@ export default function initDemo() {
         const raw = JSON.parse(configTextarea.value);
         clearAllLayers();
         renderer.importConfig(raw);
-        // Rebuild cards for imported layers
         for (const layer of renderer.getLayers()) {
           layerCount++;
-          if (layerList) {
-            const card = makeLayerCard(layer.id, layerCount, {
-              layerList,
-              renderer,
-              onSync: () => nodeGraph.syncFromRenderer(),
-            });
-            layerList.prepend(card);
-          }
+          const item = makeHierarchyItem(layer.id, layerCount, deps);
+          layerList.prepend(item);
         }
         nodeGraph.syncFromRenderer();
         if (configStatus) {
@@ -224,7 +246,7 @@ export default function initDemo() {
     });
   }
 
-  // ── Preset gallery ────────────────────────────────────────
+  // ── Preset gallery ──────────────────────────────────────
   const presetModal = document.getElementById("presetModal");
   const presetGrid = document.getElementById("presetGrid");
   const presetModalClose = document.getElementById("presetModalClose");
@@ -235,9 +257,9 @@ export default function initDemo() {
       const card = document.createElement("button");
       card.className = "preset-card";
 
-      // Create a mini palette preview from the first layer
       const firstLayer = preset.config.layers[0];
-      const pal = (firstLayer as { palette?: PaletteStop[] }).palette ?? [
+      const layerData = (firstLayer.data ?? {}) as { palette?: PaletteStop[] };
+      const pal = layerData.palette ?? [
         [0, 0, 0],
         [1, 1, 1],
       ];
@@ -262,14 +284,8 @@ export default function initDemo() {
         renderer.importConfig(JSON.parse(JSON.stringify(preset.config)));
         for (const layer of renderer.getLayers()) {
           layerCount++;
-          if (layerList) {
-            const lc = makeLayerCard(layer.id, layerCount, {
-              layerList,
-              renderer,
-              onSync: () => nodeGraph.syncFromRenderer(),
-            });
-            layerList.prepend(lc);
-          }
+          const item = makeHierarchyItem(layer.id, layerCount, deps);
+          layerList.prepend(item);
         }
         nodeGraph.syncFromRenderer();
         presetModal?.classList.add("hidden");
@@ -291,7 +307,7 @@ export default function initDemo() {
     });
   }
 
-  // ── Viewport toolbar: pause, screenshot, fullscreen ───────
+  // ── Viewport toolbar: pause, screenshot, fullscreen ─────
   const pauseBtn = document.getElementById("pauseBtn");
   const screenshotBtn = document.getElementById("screenshotBtn");
   const fullscreenBtn = document.getElementById("fullscreenBtn");
@@ -299,24 +315,21 @@ export default function initDemo() {
   let paused = false;
 
   if (pauseBtn) {
-    pauseBtn.textContent = "⏸";
+    pauseBtn.textContent = "\u23F8";
     pauseBtn.addEventListener("click", () => {
       paused = !paused;
       if (paused) {
         for (const layer of renderer.getLayers()) {
           renderer.updateLayer(layer.id, { speed: 0 });
         }
-        pauseBtn.textContent = "▶";
+        pauseBtn.textContent = "\u25B6";
         pauseBtn.classList.add("toolbar-btn-active");
       } else {
         for (const layer of renderer.getLayers()) {
-          // Restore speed from defaults or stored — we re-read the card slider values
-          // The simplest approach: just set animate back (layers store their own speed)
           renderer.updateLayer(layer.id, { animate: true });
         }
-        pauseBtn.textContent = "⏸";
+        pauseBtn.textContent = "\u23F8";
         pauseBtn.classList.remove("toolbar-btn-active");
-        // Force recompile to restore animation
         for (const layer of renderer.getLayers()) {
           renderer.updateLayer(layer.id, { speed: layer.speed });
         }
@@ -326,7 +339,6 @@ export default function initDemo() {
 
   if (screenshotBtn) {
     screenshotBtn.addEventListener("click", () => {
-      // Need to read the canvas on the next frame after render
       requestAnimationFrame(() => {
         canvas.toBlob((blob) => {
           if (!blob) return;
@@ -346,10 +358,8 @@ export default function initDemo() {
     fullscreenBtn.addEventListener("click", () => {
       if (document.fullscreenElement) {
         document.exitFullscreen();
-        fullscreenBtn.textContent = "⛶";
       } else {
         viewport?.requestFullscreen();
-        fullscreenBtn.textContent = "⛶";
       }
     });
   }

@@ -1,5 +1,6 @@
-.add-row {
-  padding: 12px;
+.add-row,
+.hierarchy-actions {
+  padding: 10px;
   border-bottom: 1px solid var(--glass-border);
 }
 

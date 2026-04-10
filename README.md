@@ -97,6 +97,56 @@ The renderer is **backend-driven**: each visual type (noise today, particles and
 
 ---
 
+## Compiling and shipping scenes
+
+rae-noise supports two ways to ship visuals to production:
+
+### Path 1: Ship the full library + JSON config
+
+Import the library, pass in a config exported from the editor. Shaders compile on first frame.
+
+```ts
+import { createRenderer } from "rae-noise";
+
+const renderer = createRenderer(canvas);
+renderer.importConfig(savedConfig);
+```
+
+This ships the full library bundle. Straightforward, no build step beyond your bundler.
+
+### Path 2: Precompile for minimal runtime (planned)
+
+Design a scene in the editor, compile it, and ship only the frozen result with a tiny runtime. The compile step bakes shader source and uniforms so the production bundle doesn't need backends, builders, or validation.
+
+```
+ [Editor UI]
+      |
+      v
+ renderer.compile()        -->  CompiledScene (baked shaders + frozen uniforms)
+      |
+      v
+ emit(compiledScene)       -->  scene.js (self-contained module)
+      |
+      v
+ rae-noise/runtime         -->  minimal replay loop (~5-10 KB gzipped)
+```
+
+The compiled output strips everything the runtime doesn't need: no shader builder, no GLSL chunks, no config serializer, no unused backends. A typical 3-layer scene compiles to ~2 KB of JSON.
+
+```ts
+// Production site — only imports the minimal runtime
+import { replay } from "rae-noise/runtime";
+import scene from "./my-background.json";
+
+const handle = replay(canvas, scene);
+handle.set("speed", 2.0);  // exposed params still adjustable
+handle.destroy();           // cleanup
+```
+
+The emitter (`compiler/emit.ts`) and minimal runtime (`rae-noise/runtime`) are not yet implemented — the `Backend.compile()` hooks and `CompiledScene` format that they depend on are in place.
+
+---
+
 ## Development
 
 **Requirements:** Node 20+, pnpm 9

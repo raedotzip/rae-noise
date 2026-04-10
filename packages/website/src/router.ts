@@ -23,17 +23,11 @@ for (const path in templateModules) {
   templates[name] = Handlebars.compile(templateModules[path] as string);
 }
 
-const routes: Record<string, { key: string; data: unknown }> = {
-  "/": { key: "demo", data: {} },
+const routes: Record<string, { key: string; data: Record<string, unknown> }> = {
+  "/": { key: "home", data: {} },
+  "/editor": { key: "editor", data: {} },
   "/docs": { key: "docs", data: {} },
 };
-
-// export function renderNav() {
-//   const navTemplate = Handlebars.compile(Handlebars.partials["nav/nav"] as string);
-//   const mobileTemplate = Handlebars.compile(Handlebars.partials["nav/mobile-nav"] as string);
-//   document.getElementById("nav")!.innerHTML = navTemplate(siteData);
-//   document.getElementById("mobile-nav")!.innerHTML = mobileTemplate(siteData);
-// }
 
 export function renderRoute(path: string) {
   const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -41,5 +35,15 @@ export function renderRoute(path: string) {
   const route = routes[normalised] ?? routes["/"];
   const template = templates[route.key] ?? templates.home;
   const app = document.getElementById("app");
-  if (app) app.innerHTML = template(route.data);
+  if (app) app.innerHTML = template({ ...route.data, base });
+}
+
+/**
+ * Returns the normalised route key for the current path.
+ * Used by main.ts to decide which page-specific init to run.
+ */
+export function currentRouteKey(path: string): string {
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const normalised = base && path.startsWith(base) ? path.slice(base.length) || "/" : path;
+  return (routes[normalised] ?? routes["/"]).key;
 }

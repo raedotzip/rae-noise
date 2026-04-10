@@ -1,11 +1,23 @@
 import "./views";
 import initDemo from "./demo";
-import { renderRoute } from "./router";
+import { currentRouteKey, renderRoute } from "./router";
 import "./../styles/styles.css";
 
 function router() {
   renderRoute(window.location.pathname);
-  initDemo();
+  const key = currentRouteKey(window.location.pathname);
+
+  if (key === "editor") {
+    initDemo();
+  }
+
+  // Highlight the active nav link
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  for (const link of document.querySelectorAll<HTMLAnchorElement>(".nav-link")) {
+    const href = link.getAttribute("href") ?? "";
+    const linkPath = href.replace(base, "") || "/";
+    link.classList.toggle("active", linkPath === (window.location.pathname.replace(base, "") || "/"));
+  }
 }
 
 window.addEventListener("popstate", router);

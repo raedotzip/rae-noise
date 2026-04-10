@@ -1,0 +1,76 @@
+{{> layout/navbar base=base }}
+
+<div class="editor">
+  <!-- Left: Hierarchy panel (layer list, like Unity's Hierarchy) -->
+  <aside id="hierarchy">
+    <header class="panel-header">
+      <span class="panel-title">hierarchy</span>
+    </header>
+
+    <div class="hierarchy-actions">
+      <button id="addLayerBtn" class="add-btn">
+        <span class="add-btn-icon">+</span>
+        <span class="add-btn-label">add layer</span>
+      </button>
+      <div class="btn-pair">
+        <button id="openPresets" class="add-btn add-btn-secondary add-btn-half">
+          <span class="add-btn-icon">&#9670;</span>
+          <span class="add-btn-label">presets</span>
+        </button>
+        <button id="randomizeBtn" class="add-btn add-btn-secondary add-btn-half">
+          <span class="add-btn-icon">&#10227;</span>
+          <span class="add-btn-label">random</span>
+        </button>
+      </div>
+      <div class="btn-pair">
+        <button id="exportConfigBtn" class="add-btn add-btn-secondary add-btn-half">
+          <span class="add-btn-icon">&uarr;</span>
+          <span class="add-btn-label">export</span>
+        </button>
+        <button id="importConfigBtn" class="add-btn add-btn-secondary add-btn-half">
+          <span class="add-btn-icon">&darr;</span>
+          <span class="add-btn-label">import</span>
+        </button>
+      </div>
+      <button id="openNodeGraph" class="add-btn add-btn-secondary">
+        <span class="add-btn-icon">&#11041;</span>
+        <span class="add-btn-label">node graph</span>
+      </button>
+    </div>
+
+    <div id="layerList"></div>
+
+    <footer class="panel-footer">
+      <div class="fps-counter">
+        <span class="fps-dot"></span>
+        <span id="fps">-- fps</span>
+      </div>
+    </footer>
+  </aside>
+
+  <!-- Center: Viewport -->
+  {{> layout/viewport }}
+
+  <!-- Right: Inspector panel (selected layer properties) -->
+  <aside id="inspector">
+    <header class="panel-header">
+      <span class="panel-title">inspector</span>
+    </header>
+    <div id="inspectorContent">
+      <div class="inspector-empty">
+        <p>select a layer to inspect</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Modals -->
+{{> modals/node-modal }}
+{{> modals/config-modal }}
+{{> modals/preset-modal }}
+
+<!-- Tooltip -->
+<div id="tooltip">
+  <div class="tooltip-title" id="tooltipTitle"></div>
+  <div class="tooltip-body" id="tooltipBody"></div>
+</div>

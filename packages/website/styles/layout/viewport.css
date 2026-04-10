@@ -1,15 +1,23 @@
 #viewport {
   flex: 1;
   position: relative;
-  border-radius: 1rem;
   overflow: hidden;
   background: #000;
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
 }
 
 #glCanvas {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+#overlay-label {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  font-size: 0.6rem;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  pointer-events: none;
+  z-index: 5;
 }

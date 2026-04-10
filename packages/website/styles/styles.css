@@ -2,6 +2,8 @@
 @import './base/variables.css';
 @import './base/base.css';
 
+@import './layout/navbar.css';
+@import './layout/home.css';
 @import './layout/app.css';
 @import './layout/panel.css';
 @import './layout/viewport.css';

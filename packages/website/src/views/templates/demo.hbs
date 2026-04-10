@@ -1,24 +1,5 @@
-<div class="demo">
-  <div class="demo-content">
-    <!-- Sidebar -->
-    {{> layout/sidebar }}
-
-    <!-- Viewport / Canvas -->
-    {{> layout/viewport }}
-  </div>
-</div>
-
-<!-- Node Visualizer -->
-{{> modals/node-modal }}
-
-<!-- Config Export/Import -->
-{{> modals/config-modal }}
-
-<!-- Preset Gallery -->
-{{> modals/preset-modal }}
-
-<!-- Tooltip -->
-<div id="tooltip">
-  <div class="tooltip-title" id="tooltipTitle"></div>
-  <div class="tooltip-body" id="tooltipBody"></div>
+{{! Legacy route — redirects to /editor }}
+{{> layout/navbar base=base }}
+<div class="home" style="text-align:center;padding-top:4rem">
+  <p>The demo has moved to the <a href="{{base}}/editor" data-link>editor</a>.</p>
 </div>

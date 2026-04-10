@@ -1,0 +1,108 @@
+.home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 48px);
+  padding: 2rem;
+  text-align: center;
+}
+
+.home-hero {
+  max-width: 600px;
+  margin-bottom: 4rem;
+}
+
+.home-title {
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 1rem;
+}
+
+.home-title em {
+  font-style: normal;
+  opacity: 0.45;
+}
+
+.home-tagline {
+  font-size: 1.1rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.home-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.home-btn {
+  padding: 12px 28px;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid var(--glass-border);
+}
+
+.home-btn-primary {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.home-btn-primary:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.home-btn-secondary {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.home-btn-secondary:hover {
+  color: var(--text);
+  background: var(--glass);
+  transform: translateY(-2px);
+}
+
+.home-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 800px;
+  width: 100%;
+}
+
+.home-feature {
+  padding: 24px;
+  border-radius: var(--radius);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  text-align: left;
+}
+
+.home-feature-icon {
+  font-size: 1.4rem;
+  opacity: 0.6;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.home-feature h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.home-feature p {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+}

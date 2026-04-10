@@ -3,7 +3,7 @@ import type { BlendMode, FlowType, NoiseLayer, NoiseType } from "rae-noise";
 import { swatchGradient } from "./color";
 import { makeChipGroup, makeDial, makePaletteEditor, makeSlider, makeToggleRow } from "./widgets";
 
-interface LayerCardDeps {
+export interface LayerCardDeps {
   layerList: HTMLElement;
   renderer: {
     getLayers: () => NoiseLayer[];
@@ -12,93 +12,219 @@ interface LayerCardDeps {
     reorderLayers: (ids: string[]) => void;
   };
   onSync: () => void;
+  onSelect: (id: string) => void;
+  onRemove: (id: string) => void;
 }
 
-export function makeLayerCard(
+// ── Hierarchy item (left panel) ─────────────────────────
+
+/**
+ * Creates a compact hierarchy row for a layer — swatch, name, visibility,
+ * drag handle. Clicking selects it (delegates to deps.onSelect).
+ */
+export function makeHierarchyItem(
   id: string,
   layerNum: number,
-  { layerList, renderer, onSync }: LayerCardDeps
+  deps: LayerCardDeps
 ): HTMLElement {
+  const { renderer, onSync, onSelect, onRemove } = deps;
   const layer = renderer.getLayers().find((l) => l.id === id);
   if (!layer) throw new Error(`Layer ${id} not found`);
-  let visible = true;
+  let visible = layer.visible;
 
-  // ── Render card shell from Handlebars template ────────────
-  const noiseTypes: NoiseType[] = ["simplex", "perlin", "worley", "fbm", "curl"];
-  const blendModes: BlendMode[] = ["add", "multiply", "screen", "overlay"];
-  const flowTypes: FlowType[] = ["linear", "radial", "spiral", "vortex", "turbulent"];
+  const item = document.createElement("div");
+  item.className = "hierarchy-item";
+  item.dataset.id = id;
 
-  // Build the card element from scratch (the template gives us structure,
-  // but all real widget bodies are still constructed by widget helpers so
-  // interactivity is preserved exactly as before).
-  const card = document.createElement("div");
-  card.className = "layer-card open";
-  card.dataset.id = id;
-
-  // ── Patch helper ──────────────────────────────────────────
-  function patch(p: Partial<NoiseLayer>) {
-    renderer.updateLayer(id, p);
-    updateSwatch();
-  }
-
-  function updateSwatch() {
-    const l = renderer.getLayers().find((x) => x.id === id);
-    if (!l) return;
-    const swatch = card.querySelector<HTMLElement>(".layer-swatch");
-    if (swatch) swatch.style.background = swatchGradient(l.palette);
-    const preview = card.querySelector<HTMLElement>(".palette-preview");
-    if (preview) preview.style.background = swatchGradient(l.palette);
-  }
-
-  // ── HEADER (from partial) ─────────────────────────────────
+  // Build from the existing layer-header partial if available,
+  // otherwise construct manually for reliability.
   const headerSrc = (Handlebars.partials as Record<string, string>)["layer/layer-header"];
   const headerHtml = Handlebars.compile(headerSrc)({
     layerNum,
     name: layer.name,
     swatchGradient: swatchGradient(layer.palette),
   });
+  item.innerHTML = headerHtml;
 
-  const headerWrap = document.createElement("div");
-  headerWrap.innerHTML = headerHtml;
-  const header = headerWrap.firstElementChild as HTMLElement;
+  // Replace the outer .layer-header wrapper's class
+  const headerEl = item.querySelector<HTMLElement>(".layer-header");
+  if (headerEl) headerEl.className = "hierarchy-row";
 
-  // Wire header events
-  const nameInput = header.querySelector<HTMLInputElement>(".layer-name-input");
-  if (!nameInput) throw new Error("Missing .layer-name-input");
-  nameInput.addEventListener("change", () => {
-    patch({ name: nameInput.value.trim() || `layer ${layerNum}` });
+  // Wire name input
+  const nameInput = item.querySelector<HTMLInputElement>(".layer-name-input");
+  if (nameInput) {
+    nameInput.addEventListener("change", () => {
+      renderer.updateLayer(id, { name: nameInput.value.trim() || `layer ${layerNum}` });
+      onSync();
+    });
+    nameInput.addEventListener("click", (e) => e.stopPropagation());
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") nameInput.blur();
+    });
+  }
+
+  // Wire visibility toggle
+  const visBtn = item.querySelector<HTMLButtonElement>(".layer-vis");
+  if (visBtn) {
+    visBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      visible = !visible;
+      visBtn.classList.toggle("active", visible);
+      const currentOpacity = renderer.getLayers().find((l) => l.id === id)?.opacity ?? 1;
+      renderer.updateLayer(id, { opacity: visible ? currentOpacity : 0 });
+      item.classList.toggle("hierarchy-item-hidden", !visible);
+    });
+  }
+
+  // Wire remove button
+  const removeBtn = item.querySelector<HTMLButtonElement>(".layer-remove");
+  if (removeBtn) {
+    removeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      renderer.removeLayer(id);
+      item.remove();
+      onRemove(id);
+      onSync();
+    });
+  }
+
+  // Click to select
+  const row = item.querySelector<HTMLElement>(".hierarchy-row") ?? item;
+  row.addEventListener("click", () => onSelect(id));
+
+  // ── Drag reordering ──────────────────────────────────
+  const dragHandle = item.querySelector<HTMLElement>(".layer-drag-handle");
+  if (dragHandle) {
+    dragHandle.addEventListener("mousedown", () => {
+      item.draggable = true;
+    });
+    document.addEventListener("mouseup", () => {
+      item.draggable = false;
+    }, { capture: true });
+  }
+
+  item.addEventListener("dragstart", (e) => {
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer?.setData("text/plain", id);
+    requestAnimationFrame(() => item.classList.add("dragging"));
+  });
+
+  item.addEventListener("dragend", () => {
+    item.classList.remove("dragging");
+    item.draggable = false;
+    for (const c of document.querySelectorAll(".hierarchy-item")) {
+      c.classList.remove("drag-over-top", "drag-over-bottom");
+    }
+  });
+
+  item.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    const rect = item.getBoundingClientRect();
+    const isTop = e.clientY < rect.top + rect.height / 2;
+    for (const c of document.querySelectorAll(".hierarchy-item")) {
+      c.classList.remove("drag-over-top", "drag-over-bottom");
+    }
+    item.classList.add(isTop ? "drag-over-top" : "drag-over-bottom");
+  });
+
+  item.addEventListener("dragleave", () => {
+    item.classList.remove("drag-over-top", "drag-over-bottom");
+  });
+
+  item.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const fromId = e.dataTransfer?.getData("text/plain");
+    if (fromId === id) return;
+    const { layerList } = deps;
+    const fromItem = layerList.querySelector<HTMLElement>(`[data-id="${fromId}"]`);
+    if (!fromItem) return;
+    const rect = item.getBoundingClientRect();
+    const isTop = e.clientY < rect.top + rect.height / 2;
+    if (isTop) layerList.insertBefore(fromItem, item);
+    else layerList.insertBefore(fromItem, item.nextSibling);
+    item.classList.remove("drag-over-top", "drag-over-bottom");
+    const orderedIds = [...layerList.querySelectorAll<HTMLElement>(".hierarchy-item")]
+      .map((c) => c.dataset.id ?? "")
+      .filter(Boolean)
+      .reverse();
+    renderer.reorderLayers(orderedIds);
     onSync();
   });
-  nameInput.addEventListener("click", (e) => e.stopPropagation());
-  nameInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") nameInput.blur();
-  });
 
-  const visBtn = header.querySelector<HTMLButtonElement>(".layer-vis");
-  if (!visBtn) throw new Error("Missing .layer-vis");
-  visBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    visible = !visible;
-    visBtn.classList.toggle("active", visible);
-    const currentOpacity = renderer.getLayers().find((l) => l.id === id)?.opacity ?? 1;
-    patch({ opacity: visible ? currentOpacity : 0 });
-    card.classList.toggle("layer-hidden", !visible);
-  });
+  return item;
+}
 
-  const removeBtn = header.querySelector<HTMLButtonElement>(".layer-remove");
-  if (!removeBtn) throw new Error("Missing .layer-remove");
-  removeBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    renderer.removeLayer(id);
-    card.remove();
-    onSync();
-  });
+/**
+ * Update the swatch on a hierarchy item to reflect current palette.
+ */
+export function updateHierarchySwatch(layerList: HTMLElement, id: string, palette: NoiseLayer["palette"]) {
+  const item = layerList.querySelector<HTMLElement>(`[data-id="${id}"]`);
+  if (!item) return;
+  const swatch = item.querySelector<HTMLElement>(".layer-swatch");
+  if (swatch) swatch.style.background = swatchGradient(palette);
+}
 
-  header.addEventListener("click", () => card.classList.toggle("open"));
+// ── Inspector panel (right panel) ───────────────────────
 
-  // ── BODY (widgets built programmatically, attached to a wrapper) ──
+/**
+ * Populate the inspector panel with all editable controls for a layer.
+ * Returns nothing — it writes directly into `#inspectorContent`.
+ */
+export function populateInspector(
+  id: string,
+  deps: LayerCardDeps
+): void {
+  const { renderer, onSync, layerList } = deps;
+  const container = document.getElementById("inspectorContent");
+  if (!container) return;
+
+  const layer = renderer.getLayers().find((l) => l.id === id);
+  if (!layer) {
+    container.innerHTML = '<div class="inspector-empty"><p>layer not found</p></div>';
+    return;
+  }
+
+  const noiseTypes: NoiseType[] = ["simplex", "perlin", "worley", "fbm", "curl"];
+  const blendModes: BlendMode[] = ["add", "multiply", "screen", "overlay"];
+  const flowTypes: FlowType[] = ["linear", "radial", "spiral", "vortex", "turbulent"];
+
+  function patch(p: Partial<NoiseLayer>) {
+    renderer.updateLayer(id, p);
+    // Update swatch in hierarchy
+    const l = renderer.getLayers().find((x) => x.id === id);
+    if (l) updateHierarchySwatch(layerList, id, l.palette);
+    // Update palette preview in inspector
+    if (l) {
+      const preview = container?.querySelector<HTMLElement>(".palette-preview");
+      if (preview) preview.style.background = swatchGradient(l.palette);
+    }
+  }
+
+  // Clear and rebuild
+  container.innerHTML = "";
+
   const body = document.createElement("div");
-  body.className = "layer-body";
+  body.className = "inspector-body";
+
+  // Layer name at top of inspector
+  const nameGroup = document.createElement("div");
+  nameGroup.className = "group";
+  nameGroup.innerHTML = `<div class="group-label">name</div>`;
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.className = "layer-name-input inspector-name-input";
+  nameInput.value = layer.name;
+  nameInput.addEventListener("change", () => {
+    patch({ name: nameInput.value.trim() || "layer" });
+    // Also update the hierarchy item's name input
+    const hierarchyItem = layerList.querySelector<HTMLElement>(`[data-id="${id}"]`);
+    const hierarchyName = hierarchyItem?.querySelector<HTMLInputElement>(".layer-name-input");
+    if (hierarchyName) hierarchyName.value = nameInput.value;
+    onSync();
+  });
+  nameGroup.appendChild(nameInput);
+  body.appendChild(nameGroup);
 
   body.appendChild(
     makeChipGroup("noise type", noiseTypes, layer.noiseType, (v) => {
@@ -163,9 +289,6 @@ export function makeLayerCard(
   body.appendChild(
     makeSlider("opacity", 0, 1, 0.01, layer.opacity, 2, (v) => {
       patch({ opacity: v });
-      visible = v > 0.01;
-      visBtn.classList.toggle("active", visible);
-      card.classList.toggle("layer-hidden", !visible);
     })
   );
 
@@ -176,70 +299,5 @@ export function makeLayerCard(
     })
   );
 
-  // ── Drag handle events ────────────────────────────────────
-  const dragHandle = header.querySelector<HTMLElement>(".layer-drag-handle");
-  if (!dragHandle) throw new Error("Missing .layer-drag-handle");
-
-  dragHandle.addEventListener("mousedown", () => {
-    card.draggable = true;
-  });
-  document.addEventListener(
-    "mouseup",
-    () => {
-      card.draggable = false;
-    },
-    { capture: true }
-  );
-
-  card.addEventListener("dragstart", (e) => {
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer?.setData("text/plain", id);
-    requestAnimationFrame(() => card.classList.add("dragging"));
-  });
-
-  card.addEventListener("dragend", () => {
-    card.classList.remove("dragging");
-    card.draggable = false;
-    for (const c of document.querySelectorAll(".layer-card")) {
-      c.classList.remove("drag-over-top", "drag-over-bottom");
-    }
-  });
-
-  card.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-    const rect = card.getBoundingClientRect();
-    const isTop = e.clientY < rect.top + rect.height / 2;
-    for (const c of document.querySelectorAll(".layer-card")) {
-      c.classList.remove("drag-over-top", "drag-over-bottom");
-    }
-    card.classList.add(isTop ? "drag-over-top" : "drag-over-bottom");
-  });
-
-  card.addEventListener("dragleave", () => {
-    card.classList.remove("drag-over-top", "drag-over-bottom");
-  });
-
-  card.addEventListener("drop", (e) => {
-    e.preventDefault();
-    const fromId = e.dataTransfer?.getData("text/plain");
-    if (fromId === id) return;
-    const fromCard = layerList.querySelector<HTMLElement>(`[data-id="${fromId}"]`);
-    if (!fromCard) return;
-    const rect = card.getBoundingClientRect();
-    const isTop = e.clientY < rect.top + rect.height / 2;
-    if (isTop) layerList.insertBefore(fromCard, card);
-    else layerList.insertBefore(fromCard, card.nextSibling);
-    card.classList.remove("drag-over-top", "drag-over-bottom");
-    const orderedIds = [...layerList.querySelectorAll<HTMLElement>(".layer-card")]
-      .map((c) => c.dataset.id ?? "")
-      .filter(Boolean)
-      .reverse();
-    renderer.reorderLayers(orderedIds);
-    onSync();
-  });
-
-  card.appendChild(header);
-  card.appendChild(body);
-  return card;
+  container.appendChild(body);
 }
