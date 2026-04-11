@@ -1,3 +1,23 @@
+/**
+ * @file Default layer configuration factory.
+ *
+ * Provides {@link defaultLayer}, which returns a complete noise layer config
+ * with sensible defaults. Used internally by the renderer when adding layers
+ * with partial configs, and available to consumers who want a baseline to
+ * spread into their own configs.
+ *
+ * @example
+ * ```ts
+ * import { createRenderer, defaultLayer } from "rae-noise";
+ *
+ * const renderer = createRenderer(canvas);
+ * const id = renderer.addLayer({ ...defaultLayer(), noiseType: "worley" });
+ * ```
+ *
+ * @see {@link NoiseLayerConfig} for the full list of properties.
+ * @see {@link RaeNoiseRenderer.addLayer} which merges partials with these defaults.
+ */
+
 import type { NoiseLayerConfig } from "../types";
 
 /**
@@ -9,7 +29,7 @@ import type { NoiseLayerConfig } from "../types";
  * Default values:
  * | Property       | Default          |
  * |----------------|------------------|
- * | `backend`      | `"noise"`        |
+ * | `plugin`       | `"noise"`        |
  * | `noiseType`    | `"simplex"`      |
  * | `scale`        | `3.0`            |
  * | `octaves`      | `4`              |
@@ -18,7 +38,7 @@ import type { NoiseLayerConfig } from "../types";
  * | `flowType`     | `"linear"`       |
  * | `contrast`     | `1.0`            |
  * | `brightness`   | `0.0`            |
- * | `palette`      | black -> white   |
+ * | `palette`      | black → white    |
  * | `opacity`      | `1.0`            |
  * | `blendMode`    | `"add"`          |
  * | `animate`      | `true`           |
@@ -39,7 +59,7 @@ import type { NoiseLayerConfig } from "../types";
 export function defaultLayer(): Omit<NoiseLayerConfig, "id"> {
   return {
     name: "layer",
-    backend: "noise",
+    plugin: "noise",
     noiseType: "simplex",
     scale: 3.0,
     octaves: 4,

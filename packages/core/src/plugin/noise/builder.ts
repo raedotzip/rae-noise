@@ -1,3 +1,37 @@
+/**
+ * @file Dynamic GLSL fragment shader builder for the noise plugin.
+ *
+ * This module generates GLSL ES 3.0 fragment shaders at runtime based on a
+ * {@link NoiseLayerConfig}. Each noise layer gets a shader that is tailored
+ * to its exact configuration — only the GLSL chunks actually needed are
+ * included, keeping the shader compact and avoiding unused-code overhead.
+ *
+ * ## Shader generation pipeline
+ *
+ * {@link buildNoiseShader} is the entry point. It:
+ *
+ * 1. Determines which GLSL chunks are needed (simplex, perlin, worley, etc.)
+ * 2. Generates flow-specific helper functions via {@link buildFlowHelpers}
+ * 3. Builds the coordinate transformation expression via {@link buildCoord}
+ * 4. Selects the noise sampling call via {@link buildNoiseCall}
+ * 5. Assembles the final fragment shader string with uniforms, chunks, and main()
+ *
+ * ## GLSL chunks
+ *
+ * Raw GLSL source files live in `./chunks/` and are imported as strings at
+ * build time via Rollup's GLSL plugin. Each chunk is a self-contained function:
+ *
+ * - `chunks/noise/simplex.glsl` — `float simplex(vec2 p)`
+ * - `chunks/noise/perlin.glsl` — `float perlin(vec2 p)`
+ * - `chunks/noise/worley.glsl` — `float worley(vec2 p)`
+ * - `chunks/noise/fbm.glsl` — `float fbm(vec2 p, int octaves)`
+ * - `chunks/noise/curl.glsl` — `float curl(vec2 p)` + `vec2 curlNoise(vec2 p)`
+ * - `chunks/warp.glsl` — `vec2 warpDomain(vec2 p, float t)`
+ *
+ * @see {@link NoisePlugin} for the plugin that uses this builder.
+ * @see {@link NoiseLayerConfig} for the config properties that drive generation.
+ */
+
 import type { NoiseLayerConfig } from "../../types";
 
 import curlChunk from "./chunks/noise/curl.glsl?raw";
@@ -7,13 +41,36 @@ import simplexChunk from "./chunks/noise/simplex.glsl?raw";
 import worleyChunk from "./chunks/noise/worley.glsl?raw";
 import warpChunk from "./chunks/warp.glsl?raw";
 
+/**
+ * Maximum number of color stops in a noise layer's palette.
+ *
+ * This constant is baked into the generated GLSL as an array size for the
+ * `u_pal` uniform. Palettes with fewer stops leave the trailing entries
+ * zeroed; the `paletteLookup` function only reads up to `u_palLen`.
+ */
 export const MAX_PALETTE_STOPS = 8;
 
 /**
- * Generates a GLSL ES 3.0 fragment shader for a single noise layer.
+ * Generate a complete GLSL ES 3.0 fragment shader for a single noise layer.
  *
- * The shader outputs the palette-mapped noise color with full opacity.
- * Blending between layers is handled by the compositor, not here.
+ * The output shader samples noise, applies contrast/brightness, maps through
+ * the color palette, and outputs an RGBA fragment. Blending between layers
+ * is handled by the {@link Compositor}, not here — the shader always outputs
+ * `alpha = 1.0`.
+ *
+ * @param layer - The noise layer config that determines which GLSL chunks,
+ *                flow helpers, and noise calls are included in the shader.
+ * @returns A complete GLSL ES 3.0 fragment shader source string.
+ *
+ * @example
+ * ```ts
+ * const fragSrc = buildNoiseShader(layer);
+ * const program = linkProgram(gl, FULLSCREEN_VERT, fragSrc);
+ * ```
+ *
+ * @see {@link buildCoord} for coordinate transformation logic.
+ * @see {@link buildNoiseCall} for noise function selection.
+ * @see {@link buildFlowHelpers} for flow-type-specific GLSL helpers.
  */
 export function buildNoiseShader(layer: NoiseLayerConfig): string {
   const needsSimplex = ["simplex", "fbm", "curl"].includes(layer.noiseType) || layer.warp > 0;
@@ -85,6 +142,16 @@ void main() {
 `;
 }
 
+/**
+ * Build the GLSL expression that computes the sampling coordinate `p`.
+ *
+ * The expression varies by flow type — linear flows translate along a
+ * direction vector, radial flows expand from center, spiral/vortex flows
+ * rotate, and turbulent flows add simplex-based domain jitter.
+ *
+ * @param l - The noise layer config (uses `flowType`, `animate`).
+ * @returns A GLSL expression string evaluating to `vec2`.
+ */
 function buildCoord(l: NoiseLayerConfig): string {
   const t = l.animate ? "u_time * u_speed" : "0.0";
   const base = "v_uv * u_scale";
@@ -103,6 +170,15 @@ function buildCoord(l: NoiseLayerConfig): string {
   }
 }
 
+/**
+ * Build the GLSL noise function call expression.
+ *
+ * Selects the appropriate noise function based on `noiseType`. For `fbm`,
+ * the octave count is baked as a literal integer argument.
+ *
+ * @param l - The noise layer config (uses `noiseType`, `octaves`).
+ * @returns A GLSL expression string evaluating to `float`.
+ */
 function buildNoiseCall(l: NoiseLayerConfig): string {
   switch (l.noiseType) {
     case "simplex":
@@ -118,6 +194,16 @@ function buildNoiseCall(l: NoiseLayerConfig): string {
   }
 }
 
+/**
+ * Build GLSL helper functions required by certain flow types.
+ *
+ * - `spiral` and `vortex` both need `rotateUV()` (2D rotation).
+ * - `vortex` additionally needs `vortexUV()` (distance-dependent rotation).
+ * - Other flow types return an empty string (no helpers needed).
+ *
+ * @param layer - The noise layer config (uses `flowType`).
+ * @returns GLSL function definitions to prepend before `main()`, or `""`.
+ */
 export function buildFlowHelpers(layer: NoiseLayerConfig): string {
   const parts: string[] = [];
 

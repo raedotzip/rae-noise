@@ -14,7 +14,7 @@ pnpm workspace with two packages:
 
 ## Core library architecture
 
-Modular, backend-driven renderer. Each visual type (noise, particles, lines, etc.) is a self-contained backend. The renderer orchestrates backends and composites their output via FBO ping-pong blending.
+Modular, plugin-driven renderer. Each visual type (noise, particles, lines, etc.) is a self-contained plugin. The renderer orchestrates plugins and composites their output via FBO ping-pong blending.
 
 ### Public API
 
@@ -23,7 +23,7 @@ createRenderer(canvas) → RaeNoiseRenderer
 defaultLayer()         → Omit<NoiseLayerConfig, 'id'>
 ```
 
-`RaeNoiseRenderer` methods: `addLayer`, `removeLayer`, `updateLayer`, `getLayers`, `reorderLayers`, `destroy`, `exportConfig`, `importConfig`, `registerBackend`.
+`RaeNoiseRenderer` methods: `addLayer`, `removeLayer`, `updateLayer`, `getLayers`, `reorderLayers`, `destroy`, `exportConfig`, `importConfig`, `registerPlugin`.
 
 ### Directory layout
 
@@ -37,9 +37,9 @@ packages/core/src/
     program.ts                      # compileShader, linkProgram, UniformCache
     quad.ts                         # Fullscreen quad VAO + vertex shader
     fbo.ts                          # Framebuffer object wrapper
-  backend/
+  plugin/
     noise/
-      index.ts                      # NoiseBackend (implements Backend interface)
+      index.ts                      # NoisePlugin (implements Plugin interface)
       builder.ts                    # buildNoiseShader() — single-layer GLSL generation
       chunks/                       # GLSL shader fragments
         noise/simplex.glsl, perlin.glsl, worley.glsl, fbm.glsl, curl.glsl
@@ -56,22 +56,22 @@ packages/core/src/
 
 ### How rendering works
 
-1. `createRenderer()` initializes WebGL2, registers the built-in noise backend, creates the compositor, and starts a `requestAnimationFrame` loop
-2. Each visible layer is rendered to its own FBO by its backend (e.g., NoiseBackend draws a fullscreen quad with a per-layer noise shader)
+1. `createRenderer()` initializes WebGL2, registers the built-in noise plugin, creates the compositor, and starts a `requestAnimationFrame` loop
+2. Each visible layer is rendered to its own FBO by its plugin (e.g., NoisePlugin draws a fullscreen quad with a per-layer noise shader)
 3. The compositor blends all layer FBOs together using GL blend state (add/multiply/screen) or a two-pass overlay shader, then applies a gamma correction pass to the canvas
-4. When a layer's structural config changes (noiseType, flowType, octaves, animate, warp, curlStrength), the backend recompiles only that layer's shader. Non-structural changes (speed, scale, palette, opacity, etc.) are uploaded as uniforms per-frame with no recompilation
+4. When a layer's structural config changes (noiseType, flowType, octaves, animate, warp, curlStrength), the plugin recompiles only that layer's shader. Non-structural changes (speed, scale, palette, opacity, etc.) are uploaded as uniforms per-frame with no recompilation
 
-### Backend system
+### Plugin system
 
-Backends implement the `Backend<L>` interface: `init`, `render`, `needsRecompile`, `recompile`, `removeLayer`, `destroy`. The noise backend is built-in. Custom backends are registered via `renderer.registerBackend(myBackend)`. Each backend owns its own shaders, geometry, and per-frame rendering logic. Adding a new visual type = one new backend file, zero changes to existing code.
+Plugins implement the `Plugin<L>` interface: `init`, `render`, `needsRecompile`, `recompile`, `removeLayer`, `destroy`. The noise plugin is built-in. Custom plugins are registered via `renderer.registerPlugin(myPlugin)`. Each plugin owns its own shaders, geometry, and per-frame rendering logic. Adding a new visual type = one new plugin file, zero changes to existing code.
 
 ### Type system
 
-- `LayerBase` — shared fields: id, name, backend, opacity, blendMode, visible
+- `LayerBase` — shared fields: id, name, plugin, opacity, blendMode, visible
 - `NoiseLayerConfig extends LayerBase` — noise-specific: noiseType, scale, octaves, speed, direction, flowType, contrast, brightness, palette, animate, warp, curlStrength
 - `Layer` — discriminated union of all layer configs (currently just NoiseLayerConfig)
 - `NoiseLayer` — deprecated alias for NoiseLayerConfig (backwards compat)
-- `Backend<L>` — interface for rendering backends
+- `Plugin<L>` — interface for rendering plugins
 - `RendererConfig` — serializable JSON format: `{ version, layers }` for export/import
 
 ### JSON config export/import
@@ -89,7 +89,7 @@ Each noise layer has: `noiseType` (simplex/perlin/worley/fbm/curl), `scale`, `oc
 
 ## Website architecture
 
-Vanilla TypeScript + Handlebars templates (no framework). Key files:
+Vanilla TypeScript + jQuery + Handlebars templates (no framework). Key files:
 
 - `packages/website/src/main.ts` — Entry point, inits demo + router
 - `packages/website/src/router.ts` — Client-side SPA routing (/ -> demo, /docs -> docs)
@@ -143,7 +143,7 @@ pnpm test             # Run vitest tests
 ## Current project state
 
 - npm package not yet published — awaiting 1.0 release
-- Backend architecture implemented: modular system supports custom visual backends
+- Plugin architecture implemented: modular system supports custom visual plugins
 - Tests written: vitest unit tests for renderer, builder, defaults, serializer (48 tests)
 - Active development: demo live on GitHub Pages
 - README notes project is not ready for external pull requests

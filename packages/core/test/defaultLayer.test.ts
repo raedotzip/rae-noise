@@ -6,7 +6,7 @@ describe("defaultLayer", () => {
     const layer = defaultLayer();
     const keys = [
       "name",
-      "backend",
+      "plugin",
       "noiseType",
       "scale",
       "octaves",
@@ -35,7 +35,7 @@ describe("defaultLayer", () => {
 
   it("returns the documented default values", () => {
     const layer = defaultLayer();
-    expect(layer.backend).toBe("noise");
+    expect(layer.plugin).toBe("noise");
     expect(layer.noiseType).toBe("simplex");
     expect(layer.scale).toBe(3.0);
     expect(layer.octaves).toBe(4);

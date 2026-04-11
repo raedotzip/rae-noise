@@ -16,6 +16,7 @@ Rae Noise's main seling point is the web editor where users can very easily edit
   - Works Across Frameworks
   - Low Integration Cost / Small Executable
   - Organized and Easy to Use Documentation
+  - Compatibility (this library will use WebGPU once it becomes a more wildly avaliable technology)
 
 ### Core Initial Features
   - Web Interface to design procedulelly generated graphics for webpage

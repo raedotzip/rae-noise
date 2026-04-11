@@ -3,7 +3,7 @@ import {
   MAX_PALETTE_STOPS,
   buildFlowHelpers,
   buildNoiseShader,
-} from "../src/backend/noise/builder";
+} from "../src/plugin/noise/builder";
 import { defaultLayer } from "../src/renderer/defaults";
 import type { NoiseLayerConfig } from "../src/types";
 

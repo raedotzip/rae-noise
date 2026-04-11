@@ -21,7 +21,7 @@ describe("createRenderer", () => {
     expect(typeof renderer.reorderLayers).toBe("function");
     expect(typeof renderer.exportConfig).toBe("function");
     expect(typeof renderer.importConfig).toBe("function");
-    expect(typeof renderer.registerBackend).toBe("function");
+    expect(typeof renderer.registerPlugin).toBe("function");
   });
 
   it("starts with an empty layer stack", () => {
@@ -63,11 +63,11 @@ describe("addLayer", () => {
     expect(layers[0].speed).toBe(0.3);
   });
 
-  it("defaults backend to noise when not specified", () => {
+  it("defaults plugin to noise when not specified", () => {
     const canvas = document.createElement("canvas");
     renderer = createRenderer(canvas);
     renderer.addLayer();
-    expect(renderer.getLayers()[0].backend).toBe("noise");
+    expect(renderer.getLayers()[0].plugin).toBe("noise");
   });
 
   it("sets visible to true by default", () => {
@@ -211,14 +211,14 @@ describe("exportConfig / importConfig", () => {
     expect(config.version).toBe(1);
     expect(config.layers).toHaveLength(2);
 
-    // Envelope entries have a backend field and an opaque `data` blob.
+    // Envelope entries have a plugin field and an opaque `data` blob.
     for (const entry of config.layers) {
-      expect(entry.backend).toBe("noise");
+      expect(entry.plugin).toBe("noise");
       expect(entry.data).toBeDefined();
     }
 
     // Import into fresh renderer — fresh ids are allocated, original
-    // backend-specific fields come back through the `data` blob.
+    // plugin-specific fields come back through the `data` blob.
     const canvas2 = document.createElement("canvas");
     const renderer2 = createRenderer(canvas2);
     renderer2.importConfig(config);

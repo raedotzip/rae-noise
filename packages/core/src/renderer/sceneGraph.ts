@@ -1,5 +1,46 @@
+/**
+ * @file Scene graph transform resolution for rae-noise.
+ *
+ * Implements a simple 2D scene graph where layers can be parented to other
+ * layers. Each frame, {@link resolveWorldTransforms} walks the layer list
+ * and composes local transforms with parent chains to produce world-space
+ * transforms, Unity-style.
+ *
+ * ## Composition model
+ *
+ * The current implementation is intentionally simple:
+ * - Position is **additive** in normalized canvas space (parent-scaled)
+ * - Rotation **adds** (parent rotation + child rotation)
+ * - Scale **multiplies** component-wise
+ *
+ * This is adequate for hierarchical layer positioning but is *not* a true
+ * affine matrix compose — rotating a parent does not orbit its children
+ * around the parent's position. Upgrade to matrix compose when a plugin
+ * actually needs orbit behavior.
+ *
+ * ## Safety guarantees
+ *
+ * - Cycles are rejected at mutation time by {@link Renderer.setParent}, so
+ *   this walker trusts the graph is a forest (DAG with shared roots).
+ * - Orphaned parent references (parent id not found) are treated as parentless.
+ * - Layers without a transform resolve to identity.
+ * - The output map is guaranteed to have an entry for every layer in the input.
+ *
+ * @example
+ * ```ts
+ * const transforms = resolveWorldTransforms(renderer.getLayers());
+ * const world = transforms.get(layerId);
+ * console.log(world.position, world.rotation, world.scale);
+ * ```
+ *
+ * @see {@link Transform2D} for the local (pre-composition) transform type.
+ * @see {@link WorldTransform} for the resolved world-space output type.
+ * @see {@link RaeNoiseRenderer.setParent} for building parent-child relationships.
+ */
+
 import type { Layer, Transform2D, WorldTransform } from "../types";
 
+/** Identity world transform — zero position, zero rotation, unit scale, center anchor. */
 const IDENTITY: WorldTransform = {
   position: [0, 0],
   rotation: 0,
@@ -8,23 +49,24 @@ const IDENTITY: WorldTransform = {
 };
 
 /**
- * Walks a layer list and resolves each layer's world-space transform by
- * composing its local {@link Transform2D} with its parent chain,
- * Unity-style. Returns a map keyed by layer id.
+ * Walk a layer list and resolve each layer's world-space transform by
+ * composing its local {@link Transform2D} with its parent chain.
  *
- * Layers without a transform resolve to identity. Layers whose parent
- * id can't be found are treated as parentless. Cycles are rejected by
- * {@link Renderer.setParent} at mutation time, so this walker trusts
- * the graph is a forest.
+ * Returns a map keyed by layer id. Every layer in the input is guaranteed
+ * to have an entry in the output, even if it has no transform (identity is
+ * used as the fallback).
  *
- * The current implementation is intentionally simple 2D composition —
- * position is additive in normalized canvas space, rotation adds,
- * scale multiplies component-wise. It's fine for positioning layers
- * hierarchically but it is *not* a true affine matrix compose, so
- * rotating a parent does not orbit its children around the parent's
- * position. That's a fine first cut because the current backends
- * (noise) ignore transforms entirely; upgrade to matrix compose when
- * a backend actually needs orbit behavior.
+ * @param layers - The ordered layer stack (bottom to top).
+ * @returns A map from layer id to resolved {@link WorldTransform}.
+ *
+ * @example
+ * ```ts
+ * const transforms = resolveWorldTransforms(layers);
+ * for (const layer of layers) {
+ *   const world = transforms.get(layer.id)!;
+ *   plugin.render(layer, time, w, h, world);
+ * }
+ * ```
  */
 export function resolveWorldTransforms(layers: Layer[]): Map<string, WorldTransform> {
   const byId = new Map<string, Layer>();
@@ -70,10 +112,7 @@ export function resolveWorldTransforms(layers: Layer[]): Map<string, WorldTransf
         parentWorld.position[1] + local.position[1] * parentWorld.scale[1],
       ],
       rotation: parentWorld.rotation + local.rotation,
-      scale: [
-        parentWorld.scale[0] * local.scale[0],
-        parentWorld.scale[1] * local.scale[1],
-      ],
+      scale: [parentWorld.scale[0] * local.scale[0], parentWorld.scale[1] * local.scale[1]],
       anchor: local.anchor ?? parentWorld.anchor,
     };
     memo.set(layer.id, world);
@@ -90,6 +129,13 @@ export function resolveWorldTransforms(layers: Layer[]): Map<string, WorldTransf
   return memo;
 }
 
+/**
+ * Returns a fresh identity {@link Transform2D} — zero position, zero rotation,
+ * unit scale, center anchor. Used as the default when a layer has no explicit
+ * transform.
+ *
+ * @returns An identity transform: `{ position: [0,0], rotation: 0, scale: [1,1], anchor: [0.5,0.5] }`.
+ */
 export function identityTransform(): Transform2D {
   return {
     position: [0, 0],

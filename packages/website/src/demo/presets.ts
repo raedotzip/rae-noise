@@ -13,7 +13,7 @@ function noise(
   shared: Partial<Pick<LayerEntry, "opacity" | "blendMode" | "visible">> = {}
 ): LayerEntry {
   return {
-    backend: "noise",
+    plugin: "noise",
     bv: 1,
     name,
     opacity: shared.opacity ?? 1.0,

@@ -53,17 +53,17 @@ rae-noise/
 │   ├── core/                   # rae-noise — the npm package
 │   │   ├── src/
 │   │   │   ├── index.ts        # public API re-exports
-│   │   │   ├── types/          # type definitions (Backend, Layer, RendererConfig, …)
+│   │   │   ├── types/          # type definitions (Plugin, Layer, RendererConfig, …)
 │   │   │   ├── webgl/          # low-level WebGL2 primitives (program, quad, FBO)
-│   │   │   ├── backend/        # self-contained visual backends
-│   │   │   │   └── noise/      # built-in noise backend: shaders, builder, chunks
+│   │   │   ├── plugin/         # self-contained visual plugins
+│   │   │   │   └── noise/      # built-in noise plugin: shaders, builder, chunks
 │   │   │   │       └── chunks/ # GLSL fragments (simplex, perlin, worley, fbm, curl, …)
 │   │   │   ├── compositor/     # FBO ping-pong blending + gamma pass
 │   │   │   ├── compiler/       # design-time → production-time scene compiler
 │   │   │   ├── config/         # JSON envelope serializer (exportConfig / importConfig)
 │   │   │   └── renderer/       # Renderer orchestrator, defaults, scene graph resolver
 │   │   ├── test/               # vitest unit tests
-│   │   ├── docs/               # authoring guides (e.g. adding-a-backend.md)
+│   │   ├── docs/               # authoring guides (e.g. adding-a-plugin.md)
 │   │   └── rollup.config.ts
 │   └── website/                # demo site — vanilla TS + Handlebars, deployed to Pages
 │       ├── src/
@@ -83,16 +83,16 @@ rae-noise/
 
 ### How the core library is organized
 
-The renderer is **backend-driven**: each visual type (noise today, particles and sprites later) is a self-contained module under `src/backend/` that owns its own shaders, per-layer GPU state, config schema, and compiled output. Adding a new visual type is one new backend file with zero changes to shared code — see [`packages/core/docs/adding-a-backend.md`](./packages/core/docs/adding-a-backend.md).
+The renderer is **plugin-driven**: each visual type (noise today, particles and sprites later) is a self-contained module under `src/plugin/` that owns its own shaders, per-layer GPU state, config schema, and compiled output. Adding a new visual type is one new plugin file with zero changes to shared code — see [`packages/core/docs/adding-a-plugin.md`](./packages/core/docs/adding-a-plugin.md).
 
 | Area | Purpose |
 | --- | --- |
-| `types/` | The `Backend<L>` interface, layer types, `Transform2D` / `WorldTransform`, `RendererConfig` envelope, `CompiledScene`. |
+| `types/` | The `Plugin<L>` interface, layer types, `Transform2D` / `WorldTransform`, `RendererConfig` envelope, `CompiledScene`. |
 | `webgl/` | Thin wrappers over WebGL2: shader compilation, uniform caching, fullscreen quad, FBO. |
-| `backend/noise/` | The built-in noise backend. `builder.ts` assembles a fragment shader from GLSL chunks per layer config; `index.ts` implements the `Backend` interface (render, serialize, deserialize, compile). |
+| `plugin/noise/` | The built-in noise plugin. `builder.ts` assembles a fragment shader from GLSL chunks per layer config; `index.ts` implements the `Plugin` interface (render, serialize, deserialize, compile). |
 | `compositor/` | FBO-per-layer ping-pong blending with a two-pass overlay fallback and a final gamma correction pass. |
-| `compiler/` | Walks the layer stack at design-time and asks each backend to `compile` its layers into a `CompiledScene` the minimal production runtime can replay. |
-| `config/` | JSON export/import using a per-backend envelope format — the serializer doesn't know what a noise layer looks like, it delegates to `backend.serialize` / `backend.deserialize`. |
+| `compiler/` | Walks the layer stack at design-time and asks each plugin to `compile` its layers into a `CompiledScene` the minimal production runtime can replay. |
+| `config/` | JSON export/import using a per-plugin envelope format — the serializer doesn't know what a noise layer looks like, it delegates to `plugin.serialize` / `plugin.deserialize`. |
 | `renderer/` | The `Renderer` class, default layer factory, and `resolveWorldTransforms` for the Unity-style parent/child scene graph. |
 
 ---
@@ -116,7 +116,7 @@ This ships the full library bundle. Straightforward, no build step beyond your b
 
 ### Path 2: Precompile for minimal runtime (planned)
 
-Design a scene in the editor, compile it, and ship only the frozen result with a tiny runtime. The compile step bakes shader source and uniforms so the production bundle doesn't need backends, builders, or validation.
+Design a scene in the editor, compile it, and ship only the frozen result with a tiny runtime. The compile step bakes shader source and uniforms so the production bundle doesn't need plugins, builders, or validation.
 
 ```
  [Editor UI]
@@ -131,7 +131,7 @@ Design a scene in the editor, compile it, and ship only the frozen result with a
  rae-noise/runtime         -->  minimal replay loop (~5-10 KB gzipped)
 ```
 
-The compiled output strips everything the runtime doesn't need: no shader builder, no GLSL chunks, no config serializer, no unused backends. A typical 3-layer scene compiles to ~2 KB of JSON.
+The compiled output strips everything the runtime doesn't need: no shader builder, no GLSL chunks, no config serializer, no unused plugins. A typical 3-layer scene compiles to ~2 KB of JSON.
 
 ```ts
 // Production site — only imports the minimal runtime
@@ -143,7 +143,7 @@ handle.set("speed", 2.0);  // exposed params still adjustable
 handle.destroy();           // cleanup
 ```
 
-The emitter (`compiler/emit.ts`) and minimal runtime (`rae-noise/runtime`) are not yet implemented — the `Backend.compile()` hooks and `CompiledScene` format that they depend on are in place.
+The emitter (`compiler/emit.ts`) and minimal runtime (`rae-noise/runtime`) are not yet implemented — the `Plugin.compile()` hooks and `CompiledScene` format that they depend on are in place.
 
 ---
 

@@ -1,29 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { NoiseBackend } from "../src/backend/noise/index";
 import { exportConfig, importConfig } from "../src/config/serializer";
+import { NoisePlugin } from "../src/plugin/noise/index";
 import { defaultLayer } from "../src/renderer/defaults";
-import type { Backend, BackendType, LayerEntry, NoiseLayerConfig } from "../src/types";
+import type { LayerEntry, NoiseLayerConfig, Plugin, PluginType } from "../src/types";
 
 function layer(overrides: Partial<NoiseLayerConfig> = {}): NoiseLayerConfig {
   return { ...defaultLayer(), id: "test-id", ...overrides } as NoiseLayerConfig;
 }
 
-function backends(): Map<BackendType, Backend> {
-  // NoiseBackend's serialize/deserialize are pure and don't touch GL.
-  return new Map<BackendType, Backend>([["noise", new NoiseBackend() as unknown as Backend]]);
+function plugins(): Map<PluginType, Plugin> {
+  // NoisePlugin's serialize/deserialize are pure and don't touch GL.
+  return new Map<PluginType, Plugin>([["noise", new NoisePlugin() as unknown as Plugin]]);
 }
 
 describe("exportConfig", () => {
   it("returns version 1 with layer data", () => {
-    const config = exportConfig([layer({ noiseType: "fbm" })], backends());
+    const config = exportConfig([layer({ noiseType: "fbm" })], plugins());
     expect(config.version).toBe(1);
     expect(config.layers).toHaveLength(1);
   });
 
-  it("wraps backend-specific data in the `data` blob", () => {
-    const config = exportConfig([layer({ noiseType: "worley", scale: 9 })], backends());
+  it("wraps plugin-specific data in the `data` blob", () => {
+    const config = exportConfig([layer({ noiseType: "worley", scale: 9 })], plugins());
     const entry = config.layers[0];
-    expect(entry.backend).toBe("noise");
+    expect(entry.plugin).toBe("noise");
     expect(entry.bv).toBe(1);
     const data = entry.data as { noiseType: string; scale: number };
     expect(data.noiseType).toBe("worley");
@@ -33,7 +33,7 @@ describe("exportConfig", () => {
   it("stores shared fields on the envelope, not inside data", () => {
     const config = exportConfig(
       [layer({ opacity: 0.5, blendMode: "screen", name: "bg" })],
-      backends()
+      plugins()
     );
     const entry = config.layers[0];
     expect(entry.opacity).toBe(0.5);
@@ -48,7 +48,7 @@ describe("importConfig", () => {
       version: 1,
       layers: [
         {
-          backend: "noise",
+          plugin: "noise",
           bv: 1,
           data: { noiseType: "simplex", scale: 3 },
         },
@@ -71,19 +71,19 @@ describe("importConfig", () => {
     expect(() => importConfig({ version: 1 })).toThrow("layers");
   });
 
-  it("throws when a layer entry is missing its backend field", () => {
+  it("throws when a layer entry is missing its plugin field", () => {
     expect(() =>
       importConfig({
         version: 1,
         layers: [{ bv: 1, data: {} }],
       })
-    ).toThrow("backend");
+    ).toThrow("plugin");
   });
 
   it("defaults bv to 1 when absent", () => {
     const config = importConfig({
       version: 1,
-      layers: [{ backend: "noise", data: {} }],
+      layers: [{ plugin: "noise", data: {} }],
     });
     expect((config.layers[0] as LayerEntry).bv).toBe(1);
   });
@@ -91,13 +91,13 @@ describe("importConfig", () => {
   it("round-trips through JSON.stringify/parse", () => {
     const original = exportConfig(
       [layer({ noiseType: "curl", scale: 5, name: "test" })],
-      backends()
+      plugins()
     );
     const json = JSON.stringify(original);
     const restored = importConfig(JSON.parse(json));
     expect(restored.layers).toHaveLength(1);
     const entry = restored.layers[0];
-    expect(entry.backend).toBe("noise");
+    expect(entry.plugin).toBe("noise");
     const data = entry.data as { noiseType: string };
     expect(data.noiseType).toBe("curl");
   });
