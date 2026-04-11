@@ -1,6 +1,8 @@
+import $ from "jquery";
 import type { NoiseLayer } from "rae-noise";
 import { rgbToHex } from "./color";
 
+/** A node in the visual node graph — represents one layer. */
 interface GraphNode {
   id: string;
   x: number;
@@ -9,92 +11,134 @@ interface GraphNode {
   color: string;
 }
 
+/** A directed edge between two nodes in the graph. */
 interface GraphEdge {
   from: string;
   to: string;
 }
 
+/** Dependencies required by the node graph. */
 interface NodeGraphDeps {
   getRenderer: () => {
     getLayers: () => NoiseLayer[];
   };
 }
 
-export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
-  const modalEl = document.getElementById("nodeModal");
-  const closeBtnEl = document.getElementById("nodeModalClose");
-  const canvasEl = document.getElementById("nodeCanvas") as HTMLCanvasElement | null;
-  if (!modalEl || !closeBtnEl || !canvasEl) throw new Error("Node graph elements not found");
-  const ctxEl = canvasEl.getContext("2d");
-  if (!ctxEl) throw new Error("Canvas 2d context not available");
-  const modal: HTMLElement = modalEl;
-  const closeBtn: HTMLElement = closeBtnEl;
-  const nodeCanvas: HTMLCanvasElement = canvasEl;
-  const ctx: CanvasRenderingContext2D = ctxEl;
+/** Port hit-test result. */
+interface PortHit {
+  node: GraphNode;
+  side: "in" | "out";
+}
 
-  let nodes: GraphNode[] = [];
-  let edges: GraphEdge[] = [];
+/** Dimension constants for node rendering. */
+const NODE_W: number = 150;
+const NODE_H: number = 58;
+const PORT_R: number = 5;
+const GRID_SIZE: number = 36;
+
+/**
+ * Create the interactive node graph visualisation.
+ * Returns an object with `open` and `syncFromRenderer` methods.
+ */
+export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
+  const $modal: JQuery<HTMLElement> = $("#nodeModal");
+  const $close: JQuery<HTMLElement> = $("#nodeModalClose");
+  const $canvas: JQuery<HTMLCanvasElement> = $("#nodeCanvas") as JQuery<HTMLCanvasElement>;
+
+  if (!$modal.length || !$close.length || !$canvas.length) {
+    throw new Error("Node graph elements not found");
+  }
+
+  const canvas: HTMLCanvasElement = $canvas[0];
+  const ctxResult: CanvasRenderingContext2D | null = canvas.getContext("2d");
+  if (!ctxResult) throw new Error("Canvas 2d context not available");
+  const ctx: CanvasRenderingContext2D = ctxResult;
+
+  /* ── Graph state ──────────────────────────────────────── */
+
+  const nodes: GraphNode[] = [];
+  const nodeMap: Map<string, GraphNode> = new Map<string, GraphNode>();
+  const edges: GraphEdge[] = [];
+
   let drag: { id: string; ox: number; oy: number } | null = null;
   let connecting: { fromId: string } | null = null;
 
-  const NODE_W = 150;
-  const NODE_H = 58;
-  const PORT_R = 5;
+  /* ── Graph sync ───────────────────────────────────────── */
 
-  // ── Sync from renderer ─────────────────────────────────
-  function syncFromRenderer() {
-    const layers = getRenderer().getLayers();
+  /** Synchronise the node graph state with the current renderer layers. */
+  function syncFromRenderer(): void {
+    const layers: NoiseLayer[] = getRenderer().getLayers();
 
-    for (let i = 0; i < layers.length; i++) {
-      const l = layers[i];
-      const existing = nodes.find((n) => n.id === l.id);
-      const midStop = l.palette[Math.floor(l.palette.length / 2)];
-      const color = midStop ? rgbToHex(midStop) : "#ffffff";
+    layers.forEach((layer: NoiseLayer, i: number): void => {
+      const mid = layer.palette[Math.floor(layer.palette.length / 2)];
+      const color: string = mid ? rgbToHex(mid) : "#ffffff";
 
-      if (!existing) {
-        nodes.push({
-          id: l.id,
+      let node: GraphNode | undefined = nodeMap.get(layer.id);
+
+      if (!node) {
+        node = {
+          id: layer.id,
           x: 60 + (i % 4) * 190,
           y: 60 + Math.floor(i / 4) * 140,
-          label: l.name,
+          label: layer.name,
           color,
-        });
+        };
+        nodes.push(node);
+        nodeMap.set(node.id, node);
       } else {
-        existing.label = l.name;
-        existing.color = color;
+        node.label = layer.name;
+        node.color = color;
+      }
+    });
+
+    const liveIds: Set<string> = new Set(layers.map((l: NoiseLayer): string => l.id));
+
+    for (let i: number = nodes.length - 1; i >= 0; i--) {
+      const n: GraphNode = nodes[i];
+      if (!liveIds.has(n.id)) {
+        nodes.splice(i, 1);
+        nodeMap.delete(n.id);
       }
     }
 
-    const liveIds = new Set(layers.map((l) => l.id));
-    nodes = nodes.filter((n) => liveIds.has(n.id));
-    edges = edges.filter((e) => liveIds.has(e.from) && liveIds.has(e.to));
+    for (let i: number = edges.length - 1; i >= 0; i--) {
+      const e: GraphEdge = edges[i];
+      if (!liveIds.has(e.from) || !liveIds.has(e.to)) {
+        edges.splice(i, 1);
+      }
+    }
 
     draw();
   }
 
-  function open() {
+  /** Open the node graph modal and sync state. */
+  function open(): void {
     syncFromRenderer();
     resize();
-    modal.classList.remove("hidden");
+    $modal.removeClass("hidden");
   }
 
-  // ── Resize canvas to physical pixels ──────────────────
-  function resize() {
-    const dpr = devicePixelRatio || 1;
-    const w = nodeCanvas.clientWidth;
-    const h = nodeCanvas.clientHeight;
-    nodeCanvas.width = w * dpr;
-    nodeCanvas.height = h * dpr;
+  /* ── Canvas helpers ───────────────────────────────────── */
+
+  /** Resize the canvas to match its CSS dimensions at the device pixel ratio. */
+  function resize(): void {
+    const dpr: number = window.devicePixelRatio || 1;
+    const w: number = canvas.clientWidth;
+    const h: number = canvas.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw();
   }
 
-  // ── Port positions ────────────────────────────────────
+  /** Return the [x, y] position of a node's input or output port. */
   function portPos(node: GraphNode, side: "in" | "out"): [number, number] {
-    return side === "in" ? [node.x, node.y + NODE_H / 2] : [node.x + NODE_W, node.y + NODE_H / 2];
+    return side === "in"
+      ? [node.x, node.y + NODE_H / 2]
+      : [node.x + NODE_W, node.y + NODE_H / 2];
   }
 
-  // ── Rounded rect helper ───────────────────────────────
+  /** Trace a rounded rectangle path onto the given 2D context. */
   function roundRect(
     c: CanvasRenderingContext2D,
     x: number,
@@ -102,8 +146,10 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
     w: number,
     h: number,
     r: number | [number, number, number, number]
-  ) {
-    const [tl, tr, br, bl] = Array.isArray(r) ? r : [r, r, r, r];
+  ): void {
+    const [tl, tr, br, bl]: [number, number, number, number] = Array.isArray(r)
+      ? r
+      : [r, r, r, r];
     c.beginPath();
     c.moveTo(x + tl, y);
     c.lineTo(x + w - tr, y);
@@ -117,39 +163,49 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
     c.closePath();
   }
 
-  // ── Draw ─────────────────────────────────────────────
-  function draw() {
-    const W = nodeCanvas.clientWidth;
-    const H = nodeCanvas.clientHeight;
-    ctx.clearRect(0, 0, W, H);
+  /* ── Rendering ────────────────────────────────────────── */
 
-    // Background grid
+  /** Redraw the entire node graph — background grid, edges, and nodes. */
+  function draw(): void {
+    const W: number = canvas.clientWidth;
+    const H: number = canvas.clientHeight;
+    ctx.clearRect(0, 0, W, H);
+    drawGrid(W, H);
+    drawEdges();
+    drawNodes();
+  }
+
+  /** Draw the background dot grid. */
+  function drawGrid(W: number, H: number): void {
     ctx.strokeStyle = "rgba(255,255,255,0.035)";
     ctx.lineWidth = 1;
-    const GRID = 36;
-    for (let x = 0; x < W; x += GRID) {
+
+    for (let x: number = 0; x < W; x += GRID_SIZE) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, H);
       ctx.stroke();
     }
-    for (let y = 0; y < H; y += GRID) {
+    for (let y: number = 0; y < H; y += GRID_SIZE) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(W, y);
       ctx.stroke();
     }
+  }
 
-    // Edges
+  /** Draw bezier edges between connected nodes. */
+  function drawEdges(): void {
     for (const e of edges) {
-      const from = nodes.find((n) => n.id === e.from);
-      const to = nodes.find((n) => n.id === e.to);
+      const from: GraphNode | undefined = nodeMap.get(e.from);
+      const to: GraphNode | undefined = nodeMap.get(e.to);
       if (!from || !to) continue;
-      const [fx, fy] = portPos(from, "out");
-      const [tx, ty] = portPos(to, "in");
-      const cx = (fx + tx) / 2;
 
-      const grad = ctx.createLinearGradient(fx, fy, tx, ty);
+      const [fx, fy]: [number, number] = portPos(from, "out");
+      const [tx, ty]: [number, number] = portPos(to, "in");
+      const cx: number = (fx + tx) / 2;
+
+      const grad: CanvasGradient = ctx.createLinearGradient(fx, fy, tx, ty);
       grad.addColorStop(0, `${from.color}aa`);
       grad.addColorStop(1, `${to.color}aa`);
 
@@ -160,18 +216,20 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
+  }
 
-    // Nodes
+  /** Draw all node cards with their labels and ports. */
+  function drawNodes(): void {
     for (const n of nodes) {
-      const layer = getRenderer()
+      const layer: NoiseLayer | undefined = getRenderer()
         .getLayers()
-        .find((l) => l.id === n.id);
+        .find((l: NoiseLayer): boolean => l.id === n.id);
 
       ctx.shadowColor = "rgba(0,0,0,0.5)";
       ctx.shadowBlur = 16;
       ctx.shadowOffsetY = 4;
 
-      ctx.fillStyle = "rgba(16, 16, 28, 0.94)";
+      ctx.fillStyle = "rgba(16,16,28,0.94)";
       roundRect(ctx, n.x, n.y, NODE_W, NODE_H, 8);
       ctx.fill();
 
@@ -199,7 +257,7 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
       }
 
       for (const side of ["in", "out"] as const) {
-        const [px, py] = portPos(n, side);
+        const [px, py]: [number, number] = portPos(n, side);
         ctx.beginPath();
         ctx.arc(px, py, PORT_R, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(255,255,255,0.10)";
@@ -211,72 +269,85 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
     }
   }
 
-  // ── Hit testing ───────────────────────────────────────
-  function hitNode(px: number, py: number): GraphNode | null {
-    return (
-      [...nodes]
-        .reverse()
-        .find((n) => px >= n.x && px <= n.x + NODE_W && py >= n.y && py <= n.y + NODE_H) ?? null
-    );
-  }
+  /* ── Hit testing ──────────────────────────────────────── */
 
-  function hitPort(px: number, py: number): { node: GraphNode; side: "in" | "out" } | null {
-    for (const n of nodes) {
-      for (const side of ["in", "out"] as const) {
-        const [px2, py2] = portPos(n, side);
-        if (Math.hypot(px - px2, py - py2) < PORT_R + 6) return { node: n, side };
+  /** Find the topmost node under the given point, or null. */
+  function hitNode(px: number, py: number): GraphNode | null {
+    for (let i: number = nodes.length - 1; i >= 0; i--) {
+      const n: GraphNode = nodes[i];
+      if (px >= n.x && px <= n.x + NODE_W && py >= n.y && py <= n.y + NODE_H) {
+        return n;
       }
     }
     return null;
   }
 
-  function toCanvas(e: MouseEvent): [number, number] {
-    const rect = nodeCanvas.getBoundingClientRect();
+  /** Find the port (node + side) nearest to the given point, or null. */
+  function hitPort(px: number, py: number): PortHit | null {
+    for (const n of nodes) {
+      for (const side of ["in", "out"] as const) {
+        const [x, y]: [number, number] = portPos(n, side);
+        if (Math.hypot(px - x, py - y) < PORT_R + 6) {
+          return { node: n, side };
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Convert a jQuery mouse event to canvas-local coordinates. */
+  function toCanvas(e: JQuery.MouseEventBase): [number, number] {
+    const rect: DOMRect = canvas.getBoundingClientRect();
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
-  // ── Pointer events ────────────────────────────────────
-  nodeCanvas.addEventListener("mousedown", (e) => {
-    const [px, py] = toCanvas(e);
+  /* ── Interaction ──────────────────────────────────────── */
 
-    const port = hitPort(px, py);
+  $canvas.on("mousedown", (e: JQuery.MouseDownEvent): void => {
+    const [px, py]: [number, number] = toCanvas(e);
+
+    const port: PortHit | null = hitPort(px, py);
     if (port) {
       connecting = { fromId: port.node.id };
       return;
     }
 
-    const n = hitNode(px, py);
-    if (n) {
-      drag = { id: n.id, ox: px - n.x, oy: py - n.y };
-      nodeCanvas.style.cursor = "grabbing";
+    const node: GraphNode | null = hitNode(px, py);
+    if (node) {
+      drag = { id: node.id, ox: px - node.x, oy: py - node.y };
+      $canvas.css("cursor", "grabbing");
     }
   });
 
-  nodeCanvas.addEventListener("mousemove", (e) => {
-    const [px, py] = toCanvas(e);
+  $canvas.on("mousemove", (e: JQuery.MouseMoveEvent): void => {
+    const [px, py]: [number, number] = toCanvas(e);
+
     if (drag) {
-      const n = nodes.find((n) => n.id === drag?.id);
-      if (n) {
-        n.x = px - drag.ox;
-        n.y = py - drag.oy;
+      const node: GraphNode | undefined = nodeMap.get(drag.id);
+      if (node) {
+        node.x = px - drag.ox;
+        node.y = py - drag.oy;
         draw();
       }
       return;
     }
-    const port = hitPort(px, py);
-    const node = hitNode(px, py);
-    nodeCanvas.style.cursor = port ? "crosshair" : node ? "grab" : "default";
+
+    const port: PortHit | null = hitPort(px, py);
+    const node: GraphNode | null = hitNode(px, py);
+    $canvas.css("cursor", port ? "crosshair" : node ? "grab" : "default");
   });
 
-  nodeCanvas.addEventListener("mouseup", (e) => {
-    const [px, py] = toCanvas(e);
+  $canvas.on("mouseup", (e: JQuery.MouseUpEvent): void => {
+    const [px, py]: [number, number] = toCanvas(e);
 
     if (connecting) {
-      const port = hitPort(px, py);
+      const port: PortHit | null = hitPort(px, py);
       if (port && port.node.id !== connecting.fromId) {
-        const from = connecting.fromId;
-        const to = port.node.id;
-        const idx = edges.findIndex((edge) => edge.from === from && edge.to === to);
+        const from: string = connecting.fromId;
+        const to: string = port.node.id;
+        const idx: number = edges.findIndex(
+          (edge: GraphEdge): boolean => edge.from === from && edge.to === to
+        );
         if (idx >= 0) edges.splice(idx, 1);
         else edges.push({ from, to });
         draw();
@@ -285,18 +356,21 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
     }
 
     drag = null;
-    nodeCanvas.style.cursor = "default";
+    $canvas.css("cursor", "default");
   });
 
   // Close modal
-  closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) modal.classList.add("hidden");
+  $close.on("click", (): void => {
+    $modal.addClass("hidden");
   });
 
-  new ResizeObserver(() => {
-    if (!modal.classList.contains("hidden")) resize();
-  }).observe(nodeCanvas);
+  $modal.on("click", function (this: HTMLElement, e: JQuery.ClickEvent): void {
+    if (e.target === $modal[0]) $modal.addClass("hidden");
+  });
+
+  new ResizeObserver((): void => {
+    if (!$modal.hasClass("hidden")) resize();
+  }).observe(canvas);
 
   return { open, syncFromRenderer };
 }

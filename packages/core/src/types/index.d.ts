@@ -45,12 +45,23 @@ export type PaletteStop = [number, number, number];
 
 // ── Backend type identifiers ────────────────────────────
 
-/** Built-in backend type identifiers. */
+/**
+ * Backend type string.
+ *
+ * @remarks
+ * The `(string & {})` trick preserves autocomplete for built-in
+ * backend identifiers while still allowing arbitrary third-party
+ * identifiers without widening the union.
+ */
 export type BuiltinBackendType = "noise";
 
 /**
- * Backend type string. Built-in types are strongly typed;
- * third-party backends use arbitrary strings.
+ * Backend type string.
+ *
+ * @remarks
+ * The `(string & {})` trick preserves autocomplete for built-in
+ * backend identifiers while still allowing arbitrary third-party
+ * identifiers without widening the union.
  */
 export type BackendType = BuiltinBackendType | (string & {});
 
@@ -186,8 +197,20 @@ export interface NoiseLayerConfig extends LayerBase {
 
 /**
  * Discriminated union of all layer configuration types.
- * Each backend adds its own config interface to this union.
- * The `backend` field acts as the discriminant.
+ *
+ * @remarks
+ * The `backend` field acts as the discriminant. When branching
+ * on `layer.backend`, TypeScript will automatically narrow
+ * the layer to the corresponding config type.
+ *
+ * @example
+ * ```ts
+ * for (const layer of renderer.getLayers()) {
+ *   if (layer.backend === "noise") {
+ *     layer.scale; // typed
+ *   }
+ * }
+ * ```
  */
 export type Layer = NoiseLayerConfig;
 
@@ -250,13 +273,18 @@ export interface CompiledScene {
 // ── Backend interface ───────────────────────────────────
 
 /**
- * Interface that all rendering backends must implement.
- * Each backend owns its own shaders, geometry, per-frame rendering logic,
- * AND its own config schema (serialize/deserialize) and compiled output
- * (compile). This makes backends the unit of schema ownership: adding a
- * new visual type is one new file with zero changes to shared code.
+ * Interface implemented by rendering backends.
  *
  * @typeParam L - The layer config type this backend handles.
+ *
+ * @remarks
+ * Backend lifecycle:
+ * 1. {@link init} — called once when the backend is first used
+ * 2. {@link render} — called every frame for each visible layer
+ * 3. {@link needsRecompile} — checked when layer config changes
+ * 4. {@link recompile} — called when structural changes occur
+ * 5. {@link removeLayer} — called when a layer is deleted
+ * 6. {@link destroy} — called when the renderer shuts down
  */
 export interface Backend<L extends LayerBase = LayerBase> {
   /** Unique backend type string (e.g., `"noise"`). */

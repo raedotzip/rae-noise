@@ -1,41 +1,65 @@
+import $ from "jquery";
 import Handlebars from "handlebars";
 
-const partialModules = import.meta.glob("./views/partials/**/*.hbs", {
+/** Import and register all Handlebars partials and templates at module load. */
+
+const partialModules: Record<string, string> = import.meta.glob("./views/partials/**/*.hbs", {
   eager: true,
   query: "?raw",
   import: "default",
-});
+}) as Record<string, string>;
 
 for (const path in partialModules) {
-  const name = path.replace("./views/partials/", "").replace(".hbs", "");
-  Handlebars.registerPartial(name, partialModules[path] as string);
+  const name: string = path.replace("./views/partials/", "").replace(".hbs", "");
+  Handlebars.registerPartial(name, partialModules[path]);
 }
 
-const templateModules = import.meta.glob("./views/templates/*.hbs", {
+const templateModules: Record<string, string> = import.meta.glob("./views/templates/*.hbs", {
   eager: true,
   query: "?raw",
   import: "default",
-});
+}) as Record<string, string>;
 
 const templates: Record<string, Handlebars.TemplateDelegate> = {};
 for (const path in templateModules) {
-  const name = path.replace("./views/templates/", "").replace(".hbs", "");
-  templates[name] = Handlebars.compile(templateModules[path] as string);
+  const name: string = path.replace("./views/templates/", "").replace(".hbs", "");
+  templates[name] = Handlebars.compile(templateModules[path]);
 }
 
-const routes: Record<string, { key: string; data: Record<string, unknown> }> = {
+/** Route definition mapping a URL path to a template key and data. */
+interface RouteEntry {
+  key: string;
+  data: Record<string, unknown>;
+}
+
+const routes: Record<string, RouteEntry> = {
   "/": { key: "home", data: {} },
   "/editor": { key: "editor", data: {} },
   "/docs": { key: "docs", data: {} },
 };
 
-export function renderRoute(path: string) {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const normalised = base && path.startsWith(base) ? path.slice(base.length) || "/" : path;
-  const route = routes[normalised] ?? routes["/"];
-  const template = templates[route.key] ?? templates.home;
-  const app = document.getElementById("app");
-  if (app) app.innerHTML = template({ ...route.data, base });
+/**
+ * Normalise a full pathname by stripping the deployment base prefix.
+ * Returns a path relative to the app root (e.g. "/" or "/editor").
+ */
+function normalise(path: string): string {
+  const base: string = import.meta.env.BASE_URL.replace(/\/$/, "");
+  return base && path.startsWith(base) ? path.slice(base.length) || "/" : path;
+}
+
+/**
+ * Render the correct Handlebars template into `#app` for the given path.
+ */
+export function renderRoute(path: string): void {
+  const normalised: string = normalise(path);
+  const route: RouteEntry = routes[normalised] ?? routes["/"];
+  const template: Handlebars.TemplateDelegate = templates[route.key] ?? templates.home;
+  const base: string = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const $app: JQuery<HTMLElement> = $("#app");
+
+  if ($app.length) {
+    $app.html(template({ ...route.data, base }));
+  }
 }
 
 /**
@@ -43,7 +67,6 @@ export function renderRoute(path: string) {
  * Used by main.ts to decide which page-specific init to run.
  */
 export function currentRouteKey(path: string): string {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const normalised = base && path.startsWith(base) ? path.slice(base.length) || "/" : path;
+  const normalised: string = normalise(path);
   return (routes[normalised] ?? routes["/"]).key;
 }

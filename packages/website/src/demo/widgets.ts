@@ -1,75 +1,89 @@
+import $ from "jquery";
 import Handlebars from "handlebars";
 import type { PaletteStop } from "rae-noise";
 import { rgbToHex, swatchGradient } from "./color";
 import { makeInfoBtn } from "./tooltip";
 
 // ── Handlebars eq helper (needed by chip-group active check) ──
-Handlebars.registerHelper("eq", (a: unknown, b: unknown) => a === b);
+Handlebars.registerHelper("eq", (a: unknown, b: unknown): boolean => a === b);
 
 // ── Lazy partial compiler cache ───────────────────────────────
-// We compile the partials that were registered by views/index.ts
+/**
+ * Compile a registered Handlebars partial by name.
+ * Throws if the partial has not been registered.
+ */
 function partial(name: string): Handlebars.TemplateDelegate {
-  const src = (Handlebars.partials as Record<string, string>)[name];
+  const src: string | undefined = (Handlebars.partials as Record<string, string>)[name];
   if (typeof src !== "string") throw new Error(`Partial not found: ${name}`);
   return Handlebars.compile(src);
 }
 
 // ── Shared: wire info-btn events on an element ─────────────────
-function wireInfoBtns(root: HTMLElement) {
-  for (const btn of root.querySelectorAll<HTMLButtonElement>(".info-btn")) {
-    const key = btn.title;
-    // Replace the static btn with a fully-wired one from makeInfoBtn
-    const wired = makeInfoBtn(key);
-    btn.replaceWith(wired);
-  }
+/**
+ * Replace all static `.info-btn` elements within `$root` with fully-wired
+ * tooltip buttons created by {@link makeInfoBtn}.
+ */
+function wireInfoBtns($root: JQuery<HTMLElement>): void {
+  $root.find(".info-btn").each(function (this: HTMLElement): void {
+    const key: string = (this as HTMLButtonElement).title;
+    const wired: HTMLButtonElement = makeInfoBtn(key);
+    $(this).replaceWith(wired);
+  });
 }
 
 // ── chip group ────────────────────────────────────────────────
+/**
+ * Build a chip-group widget from a Handlebars partial.
+ * Returns the root DOM element containing all chip buttons.
+ */
 export function makeChipGroup(
   label: string,
   options: string[],
   current: string,
   onChange: (v: string) => void
 ): HTMLElement {
-  const html = partial("widgets/chip-group")({ label, options, current });
-  const wrap = document.createElement("div");
-  wrap.innerHTML = html;
-  const g = wrap.firstElementChild as HTMLElement;
+  const html: string = partial("widgets/chip-group")({ label, options, current });
+  const $g: JQuery<HTMLElement> = $(html).first();
 
-  wireInfoBtns(g);
+  wireInfoBtns($g);
 
-  for (const btn of g.querySelectorAll<HTMLButtonElement>(".chip")) {
-    btn.addEventListener("click", () => {
-      for (const b of g.querySelectorAll(".chip")) b.classList.remove("active");
-      btn.classList.add("active");
-      onChange(btn.dataset.value ?? "");
-    });
-  }
+  $g.find(".chip").on("click", function (this: HTMLButtonElement): void {
+    const $btn: JQuery<HTMLButtonElement> = $(this);
+    $g.find(".chip").removeClass("active");
+    $btn.addClass("active");
+    onChange($btn.attr("data-value") ?? "");
+  });
 
-  return g;
+  return $g[0];
 }
 
 // ── toggle row ────────────────────────────────────────────────
+/**
+ * Build a toggle-row widget (label + checkbox).
+ * Returns the root DOM element.
+ */
 export function makeToggleRow(
   label: string,
   initial: boolean,
   onChange: (v: boolean) => void
 ): HTMLElement {
-  const html = partial("widgets/toggle-row")({ label, checked: initial });
-  const wrap = document.createElement("div");
-  wrap.innerHTML = html;
-  const g = wrap.firstElementChild as HTMLElement;
+  const html: string = partial("widgets/toggle-row")({ label, checked: initial });
+  const $g: JQuery<HTMLElement> = $(html).first();
 
-  wireInfoBtns(g);
+  wireInfoBtns($g);
 
-  g.querySelector("input")?.addEventListener("change", (e) => {
-    onChange((e.target as HTMLInputElement).checked);
+  $g.find("input").on("change", function (this: HTMLInputElement): void {
+    onChange(this.checked);
   });
 
-  return g;
+  return $g[0];
 }
 
 // ── slider ────────────────────────────────────────────────────
+/**
+ * Build a slider widget with range input, numeric display, and inline editing.
+ * Returns the root DOM element.
+ */
 export function makeSlider(
   label: string,
   min: number,
@@ -79,196 +93,216 @@ export function makeSlider(
   decimals: number,
   onChange: (v: number) => void
 ): HTMLElement {
-  const html = partial("widgets/slider")({
+  const html: string = partial("widgets/slider")({
     label,
     min,
     max,
     step,
     value: value.toFixed(decimals),
   });
-  const wrap = document.createElement("div");
-  wrap.innerHTML = html;
-  const g = wrap.firstElementChild as HTMLElement;
+  const $g: JQuery<HTMLElement> = $(html).first();
 
-  wireInfoBtns(g);
+  wireInfoBtns($g);
 
-  const rangeEl = g.querySelector<HTMLInputElement>('input[type="range"]');
-  const displayEl = g.querySelector<HTMLElement>(".value-display");
-  const inputEl = g.querySelector<HTMLInputElement>(".value-input");
-  if (!rangeEl || !displayEl || !inputEl) throw new Error(`Missing slider elements for "${label}"`);
-  const rangeInput: HTMLInputElement = rangeEl;
-  const valueDisplay: HTMLElement = displayEl;
-  const valueInput: HTMLInputElement = inputEl;
+  const $range: JQuery<HTMLInputElement> = $g.find<HTMLInputElement>('input[type="range"]');
+  const $display: JQuery<HTMLElement> = $g.find(".value-display");
+  const $input: JQuery<HTMLInputElement> = $g.find<HTMLInputElement>(".value-input");
 
-  function applyValue(raw: number) {
-    const factor = 10 ** decimals;
-    const v = Math.round(Math.min(max, Math.max(min, raw)) * factor) / factor;
-    valueDisplay.textContent = v.toFixed(decimals);
-    valueInput.value = v.toFixed(decimals);
-    rangeInput.value = String(v);
+  if (!$range.length || !$display.length || !$input.length) {
+    throw new Error(`Missing slider elements for "${label}"`);
+  }
+
+  /**
+   * Clamp and apply a numeric value — syncs the range slider,
+   * display label, and input field, then fires the callback.
+   */
+  function applyValue(raw: number): void {
+    const factor: number = 10 ** decimals;
+    const v: number = Math.round(Math.min(max, Math.max(min, raw)) * factor) / factor;
+    $display.text(v.toFixed(decimals));
+    $input.val(v.toFixed(decimals));
+    $range.val(String(v));
     onChange(v);
   }
 
-  rangeInput.addEventListener("input", () => applyValue(Number.parseFloat(rangeInput.value)));
+  $range.on("input", function (this: HTMLInputElement): void {
+    applyValue(Number.parseFloat(this.value));
+  });
 
-  valueDisplay.addEventListener("click", (e) => {
+  $display.on("click", (e: JQuery.ClickEvent): void => {
     e.stopPropagation();
-    valueDisplay.style.display = "none";
-    valueInput.style.display = "inline-block";
-    valueInput.focus();
-    valueInput.select();
+    $display.hide();
+    $input.css("display", "inline-block").trigger("focus").trigger("select");
   });
 
-  valueInput.addEventListener("blur", () => {
-    const v = Number.parseFloat(valueInput.value);
+  $input.on("blur", function (this: HTMLInputElement): void {
+    const v: number = Number.parseFloat(this.value);
     if (!Number.isNaN(v)) applyValue(v);
-    valueInput.style.display = "none";
-    valueDisplay.style.display = "inline";
+    $input.hide();
+    $display.css("display", "inline");
   });
 
-  valueInput.addEventListener("keydown", (e) => {
+  $input.on("keydown", function (this: HTMLInputElement, e: JQuery.KeyDownEvent): void {
     if (e.key === "Enter") {
-      valueInput.blur();
+      $(this).trigger("blur");
     } else if (e.key === "Escape") {
-      valueInput.value = valueDisplay.textContent ?? "";
-      valueInput.style.display = "none";
-      valueDisplay.style.display = "inline";
+      $(this).val($display.text() ?? "");
+      $input.hide();
+      $display.css("display", "inline");
     }
   });
 
-  valueInput.addEventListener("click", (e) => e.stopPropagation());
+  $input.on("click", (e: JQuery.ClickEvent): void => e.stopPropagation());
 
-  return g;
+  return $g[0];
 }
 
 // ── dial ──────────────────────────────────────────────────────
+/**
+ * Build a direction dial widget.
+ * The dial is a circular handle that the user can drag to set a 2D direction vector.
+ * Returns the root DOM element.
+ */
 export function makeDial(
   initial: [number, number],
   onChange: (dir: [number, number]) => void
 ): HTMLElement {
-  let angle = Math.atan2(initial[1], initial[0]);
+  let angle: number = Math.atan2(initial[1], initial[0]);
 
-  const html = partial("widgets/dial")({
+  const html: string = partial("widgets/dial")({
     dx: initial[0].toFixed(2),
     dy: initial[1].toFixed(2),
   });
-  const wrap = document.createElement("div");
-  wrap.innerHTML = html;
-  const g = wrap.firstElementChild as HTMLElement;
+  const $g: JQuery<HTMLElement> = $(html).first();
 
-  wireInfoBtns(g);
+  wireInfoBtns($g);
 
-  const dialQ = g.querySelector<HTMLElement>(".dial");
-  const needleQ = g.querySelector<HTMLElement>(".dial-needle");
-  const dxQ = g.querySelector<HTMLElement>('[data-dir="dx"]');
-  const dyQ = g.querySelector<HTMLElement>('[data-dir="dy"]');
-  if (!dialQ || !needleQ || !dxQ || !dyQ) throw new Error("Missing dial elements");
-  const dialEl: HTMLElement = dialQ;
-  const needle: HTMLElement = needleQ;
-  const dxEl: HTMLElement = dxQ;
-  const dyEl: HTMLElement = dyQ;
+  const $dial: JQuery<HTMLElement> = $g.find(".dial");
+  const $needle: JQuery<HTMLElement> = $g.find(".dial-needle");
+  const $dx: JQuery<HTMLElement> = $g.find('[data-dir="dx"]');
+  const $dy: JQuery<HTMLElement> = $g.find('[data-dir="dy"]');
 
-  function setAngle(a: number) {
+  if (!$dial.length || !$needle.length || !$dx.length || !$dy.length) {
+    throw new Error("Missing dial elements");
+  }
+
+  /** Update the needle rotation and dx/dy labels for a given angle. */
+  function setAngle(a: number): void {
     angle = a;
-    needle.style.transform = `translateY(-50%) rotate(${a}rad)`;
-    const dx = Number.parseFloat(Math.cos(a).toFixed(2));
-    const dy = Number.parseFloat(Math.sin(a).toFixed(2));
-    dxEl.textContent = dx.toFixed(2);
-    dyEl.textContent = dy.toFixed(2);
+    $needle.css("transform", `translateY(-50%) rotate(${a}rad)`);
+    const dx: number = Number.parseFloat(Math.cos(a).toFixed(2));
+    const dy: number = Number.parseFloat(Math.sin(a).toFixed(2));
+    $dx.text(dx.toFixed(2));
+    $dy.text(dy.toFixed(2));
     onChange([dx, dy]);
   }
   setAngle(angle);
 
+  /** Calculate the angle from the dial centre to a pointer event. */
   function angleFromPointer(e: PointerEvent): number {
-    const rect = dialEl.getBoundingClientRect();
+    const rect: DOMRect = $dial[0].getBoundingClientRect();
     return Math.atan2(
       e.clientY - (rect.top + rect.height / 2),
       e.clientX - (rect.left + rect.width / 2)
     );
   }
 
-  let dragging = false;
-  dialEl.addEventListener("pointerdown", (e) => {
+  let dragging: boolean = false;
+
+  $dial.on("pointerdown", function (this: HTMLElement, e: JQuery.TriggeredEvent): void {
     dragging = true;
-    dialEl.setPointerCapture(e.pointerId);
-    setAngle(angleFromPointer(e));
+    const pe: PointerEvent = e.originalEvent as PointerEvent;
+    this.setPointerCapture(pe.pointerId);
+    setAngle(angleFromPointer(pe));
   });
-  dialEl.addEventListener("pointermove", (e) => {
-    if (dragging) setAngle(angleFromPointer(e));
+
+  $dial.on("pointermove", (_e: JQuery.TriggeredEvent): void => {
+    if (dragging) {
+      const pe: PointerEvent = _e.originalEvent as PointerEvent;
+      setAngle(angleFromPointer(pe));
+    }
   });
-  dialEl.addEventListener("pointerup", () => {
+
+  $dial.on("pointerup", (): void => {
     dragging = false;
   });
 
-  return g;
+  return $g[0];
 }
 
 // ── palette editor ────────────────────────────────────────────
+/**
+ * Build a palette editor widget — a row of colour pickers with add/remove,
+ * and a gradient preview strip. Re-renders itself when stops change.
+ * Returns the root DOM element.
+ */
 export function makePaletteEditor(
   initial: PaletteStop[],
   onChange: (pal: PaletteStop[]) => void
 ): HTMLElement {
   const stops: PaletteStop[] = [...initial];
 
+  /** Convert a hex colour string to an RGB [0-1] palette stop. */
   function hexToRgbLocal(hex: string): PaletteStop {
-    const n = Number.parseInt(hex.slice(1), 16);
+    const n: number = Number.parseInt(hex.slice(1), 16);
     return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
   }
 
+  /** Render (or re-render) the palette editor DOM. */
   function render(): HTMLElement {
-    const html = partial("widgets/palette-editor")({
-      stops: stops.map((s) => rgbToHex(s)),
+    const html: string = partial("widgets/palette-editor")({
+      stops: stops.map((s: PaletteStop): string => rgbToHex(s)),
       canRemove: stops.length > 2,
       maxReached: stops.length >= 8,
     });
-    const wrap = document.createElement("div");
-    wrap.innerHTML = html;
-    const g = wrap.firstElementChild as HTMLElement;
+    const $g: JQuery<HTMLElement> = $(html).first();
 
-    wireInfoBtns(g);
+    wireInfoBtns($g);
 
-    const preview = g.querySelector<HTMLElement>(".palette-preview");
-    const stopsRow = g.querySelector<HTMLElement>(".palette-stops");
-    const addBtn = g.querySelector<HTMLButtonElement>(".palette-add");
-    if (!preview || !stopsRow || !addBtn) throw new Error("Missing palette editor elements");
+    const $preview: JQuery<HTMLElement> = $g.find(".palette-preview");
+    const $stopsRow: JQuery<HTMLElement> = $g.find(".palette-stops");
+    const $addBtn: JQuery<HTMLButtonElement> = $g.find<HTMLButtonElement>(".palette-add");
 
-    preview.style.background = swatchGradient(stops);
-
-    const pickers = stopsRow.querySelectorAll<HTMLInputElement>('input[type="color"]');
-    for (let i = 0; i < pickers.length; i++) {
-      const picker = pickers[i];
-      picker.addEventListener("input", () => {
-        stops[i] = hexToRgbLocal(picker.value);
-        preview.style.background = swatchGradient(stops);
-        onChange(stops);
-      });
+    if (!$preview.length || !$stopsRow.length || !$addBtn.length) {
+      throw new Error("Missing palette editor elements");
     }
 
-    const removeBtns = stopsRow.querySelectorAll<HTMLButtonElement>(".palette-stop-remove");
-    for (let i = 0; i < removeBtns.length; i++) {
-      const btn = removeBtns[i];
-      btn.addEventListener("click", () => {
+    $preview.css("background", swatchGradient(stops));
+
+    // Wire colour pickers
+    $stopsRow.find('input[type="color"]').each(function (this: HTMLElement, i: number): void {
+      $(this).on("input", function (this: HTMLElement): void {
+        stops[i] = hexToRgbLocal((this as HTMLInputElement).value);
+        $preview.css("background", swatchGradient(stops));
+        onChange(stops);
+      });
+    });
+
+    // Wire remove buttons
+    $stopsRow.find(".palette-stop-remove").each(function (this: HTMLElement, i: number): void {
+      $(this).on("click", (): void => {
         stops.splice(i, 1);
-        const newG = render();
-        g.replaceWith(newG);
+        const newEl: HTMLElement = render();
+        $g.replaceWith(newEl);
         onChange(stops);
       });
-    }
+    });
 
-    addBtn.addEventListener("click", () => {
+    // Wire add button
+    $addBtn.on("click", (): void => {
       if (stops.length >= 8) return;
-      const last = stops[stops.length - 1];
+      const last: PaletteStop = stops[stops.length - 1];
       stops.push([
         Math.min(1, last[0] + 0.1 + Math.random() * 0.4),
         Math.min(1, last[1] + 0.1 + Math.random() * 0.4),
         Math.min(1, last[2] + 0.1 + Math.random() * 0.4),
       ]);
-      const newG = render();
-      g.replaceWith(newG);
+      const newEl: HTMLElement = render();
+      $g.replaceWith(newEl);
       onChange(stops);
     });
 
-    return g;
+    return $g[0];
   }
 
   return render();

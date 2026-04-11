@@ -1,77 +1,92 @@
+import $ from "jquery";
 import { type PaletteStop, createRenderer, defaultLayer } from "rae-noise";
+import type { RaeNoiseRenderer, NoiseLayerConfig } from "rae-noise";
 import { makeHierarchyItem, populateInspector } from "./layerCard";
 import type { LayerCardDeps } from "./layerCard";
 import { createNodeGraph } from "./nodeGraph";
 import { presets } from "./presets";
 
-export default function initDemo() {
-  const canvas = document.getElementById("glCanvas") as HTMLCanvasElement | null;
-  if (!canvas) return;
+/**
+ * Initialise the editor demo — creates the WebGL renderer, wires up the
+ * hierarchy / inspector panels, toolbar buttons, presets, and config modals.
+ */
+export default function initDemo(): void {
+  const canvasEl: HTMLCanvasElement | null = document.getElementById("glCanvas") as HTMLCanvasElement | null;
+  if (!canvasEl) return;
 
-  const renderer = createRenderer(canvas);
+  const renderer: RaeNoiseRenderer = createRenderer(canvasEl);
 
-  // FPS display
-  const fpsEl = document.getElementById("fps");
-  if (fpsEl) {
-    renderer.onFps = (fps: number) => {
-      fpsEl.textContent = `${fps} fps`;
+  // ── FPS display ──────────────────────────────────────────
+  const $fps: JQuery<HTMLElement> = $("#fps");
+  if ($fps.length) {
+    renderer.onFps = (fps: number): void => {
+      $fps.text(`${fps} fps`);
     };
   }
 
-  // Panels
-  const layerListEl = document.getElementById("layerList");
-  if (!layerListEl) return;
-  const layerList: HTMLElement = layerListEl;;
+  // ── Panels ───────────────────────────────────────────────
+  const $layerList: JQuery<HTMLElement> = $("#layerList");
+  if (!$layerList.length) return;
+  const layerListEl: HTMLElement = $layerList[0];
 
-  // Node graph
-  const nodeGraph = createNodeGraph({ getRenderer: () => renderer });
-  const openNodeGraphBtn = document.getElementById("openNodeGraph");
-  if (openNodeGraphBtn) {
-    openNodeGraphBtn.addEventListener("click", () => nodeGraph.open());
-  }
+  // ── Node graph ───────────────────────────────────────────
+  const nodeGraph: ReturnType<typeof createNodeGraph> = createNodeGraph({ getRenderer: () => renderer });
+  $("#openNodeGraph").on("click", (): void => {
+    nodeGraph.open();
+  });
 
-  // ── Selection state ─────────────────────────────────────
+  // ── Selection state ──────────────────────────────────────
   let selectedId: string | null = null;
 
-  function selectLayer(id: string) {
+  /**
+   * Select a layer by id — highlights the hierarchy row and
+   * populates the inspector panel with that layer's controls.
+   */
+  function selectLayer(id: string): void {
     selectedId = id;
     // Update hierarchy highlight
-    for (const el of layerList.querySelectorAll(".hierarchy-item")) {
-      el.classList.toggle("selected", el.getAttribute("data-id") === id);
-    }
+    $layerList.find(".hierarchy-item").each(function (this: HTMLElement): void {
+      const $item: JQuery<HTMLElement> = $(this);
+      $item.toggleClass("selected", $item.attr("data-id") === id);
+    });
     // Populate inspector
     populateInspector(id, deps);
   }
 
-  function clearInspector() {
+  /**
+   * Deselect all layers and reset the inspector to its empty state.
+   */
+  function clearInspector(): void {
     selectedId = null;
-    const container = document.getElementById("inspectorContent");
-    if (container) {
-      container.innerHTML = '<div class="inspector-empty"><p>select a layer to inspect</p></div>';
+    const $container: JQuery<HTMLElement> = $("#inspectorContent");
+    if ($container.length) {
+      $container.html('<div class="inspector-empty"><p>select a layer to inspect</p></div>');
     }
-    for (const el of layerList.querySelectorAll(".hierarchy-item")) {
-      el.classList.remove("selected");
-    }
+    $layerList.find(".hierarchy-item").removeClass("selected");
   }
 
-  // ── Shared deps passed to hierarchy items + inspector ──
+  // ── Shared deps passed to hierarchy items + inspector ────
   const deps: LayerCardDeps = {
-    layerList,
+    layerList: layerListEl,
     renderer,
-    onSync: () => nodeGraph.syncFromRenderer(),
+    onSync: (): void => nodeGraph.syncFromRenderer(),
     onSelect: selectLayer,
-    onRemove: (id: string) => {
+    onRemove: (id: string): void => {
       if (selectedId === id) clearInspector();
     },
   };
 
-  // ── Layer management helpers ────────────────────────────
-  let layerCount = 0;
+  // ── Layer management helpers ─────────────────────────────
+  let layerCount: number = 0;
 
-  function addLayerWithCard(partial: Partial<Parameters<typeof renderer.addLayer>[0]> = {}) {
+  /**
+   * Add a new noise layer to the renderer and create its hierarchy card.
+   * Optionally accepts partial config overrides (e.g. from randomise or presets).
+   */
+  function addLayerWithCard(partial: Partial<NoiseLayerConfig> = {}): string {
     layerCount++;
 
-    const hue = Math.random();
+    const hue: number = Math.random();
     const starterPalette: PaletteStop[] = partial.palette ?? [
       [0, 0, 0],
       [
@@ -81,15 +96,15 @@ export default function initDemo() {
       ],
     ];
 
-    const id = renderer.addLayer({
+    const id: string = renderer.addLayer({
       ...defaultLayer(),
       name: `layer ${layerCount}`,
       ...partial,
       palette: starterPalette,
     });
 
-    const item = makeHierarchyItem(id, layerCount, deps);
-    layerList.prepend(item);
+    const item: HTMLElement = makeHierarchyItem(id, layerCount, deps);
+    $layerList.prepend(item);
     nodeGraph.syncFromRenderer();
 
     // Auto-select the newly added layer
@@ -97,239 +112,219 @@ export default function initDemo() {
     return id;
   }
 
-  function clearAllLayers() {
+  /**
+   * Remove every layer from the renderer, clear the hierarchy panel,
+   * and reset the inspector.
+   */
+  function clearAllLayers(): void {
     for (const layer of renderer.getLayers()) {
       renderer.removeLayer(layer.id);
     }
-    layerList.innerHTML = "";
+    $layerList.empty();
     layerCount = 0;
     clearInspector();
     nodeGraph.syncFromRenderer();
   }
 
-  // ── Add layer button ──────────────────────────────────
-  const addLayerBtn = document.getElementById("addLayerBtn");
-  if (addLayerBtn) {
-    addLayerBtn.addEventListener("click", () => addLayerWithCard());
-  }
+  // ── Add layer button ─────────────────────────────────────
+  $("#addLayerBtn").on("click", (): void => {
+    addLayerWithCard();
+  });
 
-  // ── Randomize button ──────────────────────────────────
-  const randomizeBtn = document.getElementById("randomizeBtn");
-  if (randomizeBtn) {
-    randomizeBtn.addEventListener("click", () => {
-      clearAllLayers();
-      const count = 2 + Math.floor(Math.random() * 2);
-      const noiseTypes = ["simplex", "perlin", "worley", "fbm", "curl"] as const;
-      const blendModes = ["add", "screen", "multiply", "overlay"] as const;
-      const flowTypes = ["linear", "radial", "spiral", "vortex", "turbulent"] as const;
+  // ── Randomize button ─────────────────────────────────────
+  $("#randomizeBtn").on("click", (): void => {
+    clearAllLayers();
+    const count: number = 2 + Math.floor(Math.random() * 2);
+    const noiseTypes = ["simplex", "perlin", "worley", "fbm", "curl"] as const;
+    const blendModes = ["add", "screen", "multiply", "overlay"] as const;
+    const flowTypes = ["linear", "radial", "spiral", "vortex", "turbulent"] as const;
 
-      for (let i = 0; i < count; i++) {
-        const hue = Math.random();
-        const stops = 2 + Math.floor(Math.random() * 4);
-        const palette: PaletteStop[] = [];
-        for (let s = 0; s < stops; s++) {
-          const t = s / (stops - 1);
-          palette.push([
-            Math.abs(Math.sin((hue + t) * 6.28)) * 0.8 + Math.random() * 0.2,
-            Math.abs(Math.sin((hue + t) * 6.28 + 2)) * 0.8 + Math.random() * 0.2,
-            Math.abs(Math.sin((hue + t) * 6.28 + 4)) * 0.8 + Math.random() * 0.2,
-          ]);
-        }
-        if (i === 0) palette[0] = [0, 0, 0];
-
-        addLayerWithCard({
-          noiseType: noiseTypes[Math.floor(Math.random() * noiseTypes.length)],
-          blendMode: i === 0 ? "add" : blendModes[Math.floor(Math.random() * blendModes.length)],
-          flowType: flowTypes[Math.floor(Math.random() * flowTypes.length)],
-          scale: 1 + Math.random() * 8,
-          speed: 0.05 + Math.random() * 0.8,
-          contrast: 0.8 + Math.random() * 2.0,
-          brightness: -0.2 + Math.random() * 0.3,
-          warp: Math.random() * 0.8,
-          curlStrength: Math.random() > 0.6 ? Math.random() * 0.5 : 0,
-          octaves: 2 + Math.floor(Math.random() * 5),
-          opacity: i === 0 ? 1.0 : 0.3 + Math.random() * 0.5,
-          animate: true,
-          palette,
-        });
+    for (let i: number = 0; i < count; i++) {
+      const hue: number = Math.random();
+      const stops: number = 2 + Math.floor(Math.random() * 4);
+      const palette: PaletteStop[] = [];
+      for (let s: number = 0; s < stops; s++) {
+        const t: number = s / (stops - 1);
+        palette.push([
+          Math.abs(Math.sin((hue + t) * 6.28)) * 0.8 + Math.random() * 0.2,
+          Math.abs(Math.sin((hue + t) * 6.28 + 2)) * 0.8 + Math.random() * 0.2,
+          Math.abs(Math.sin((hue + t) * 6.28 + 4)) * 0.8 + Math.random() * 0.2,
+        ]);
       }
-    });
-  }
+      if (i === 0) palette[0] = [0, 0, 0];
 
-  // ── Export / Import config ──────────────────────────────
-  const configModal = document.getElementById("configModal");
-  const configTextarea = document.getElementById("configTextarea") as HTMLTextAreaElement | null;
-  const configCopyBtn = document.getElementById("configCopyBtn");
-  const configApplyBtn = document.getElementById("configApplyBtn");
-  const configStatus = document.getElementById("configStatus");
-  const configModalTitle = document.getElementById("configModalTitle");
-  const configModalClose = document.getElementById("configModalClose");
+      addLayerWithCard({
+        noiseType: noiseTypes[Math.floor(Math.random() * noiseTypes.length)],
+        blendMode: i === 0 ? "add" : blendModes[Math.floor(Math.random() * blendModes.length)],
+        flowType: flowTypes[Math.floor(Math.random() * flowTypes.length)],
+        scale: 1 + Math.random() * 8,
+        speed: 0.05 + Math.random() * 0.8,
+        contrast: 0.8 + Math.random() * 2.0,
+        brightness: -0.2 + Math.random() * 0.3,
+        warp: Math.random() * 0.8,
+        curlStrength: Math.random() > 0.6 ? Math.random() * 0.5 : 0,
+        octaves: 2 + Math.floor(Math.random() * 5),
+        opacity: i === 0 ? 1.0 : 0.3 + Math.random() * 0.5,
+        animate: true,
+        palette,
+      });
+    }
+  });
 
-  function openConfigModal(mode: "export" | "import") {
-    if (!configModal || !configTextarea || !configCopyBtn || !configApplyBtn || !configModalTitle) {
+  // ── Export / Import config ───────────────────────────────
+  const $configModal: JQuery<HTMLElement> = $("#configModal");
+  const $configTextarea: JQuery<HTMLTextAreaElement> = $("#configTextarea") as JQuery<HTMLTextAreaElement>;
+  const $configCopyBtn: JQuery<HTMLElement> = $("#configCopyBtn");
+  const $configApplyBtn: JQuery<HTMLElement> = $("#configApplyBtn");
+  const $configStatus: JQuery<HTMLElement> = $("#configStatus");
+  const $configModalTitle: JQuery<HTMLElement> = $("#configModalTitle");
+  const $configModalClose: JQuery<HTMLElement> = $("#configModalClose");
+
+  /**
+   * Open the config modal in either export (read-only) or import (editable) mode.
+   */
+  function openConfigModal(mode: "export" | "import"): void {
+    if (!$configModal.length || !$configTextarea.length || !$configCopyBtn.length || !$configApplyBtn.length || !$configModalTitle.length) {
       return;
     }
-    configModal.classList.remove("hidden");
+    $configModal.removeClass("hidden");
 
     if (mode === "export") {
-      configModalTitle.textContent = "export config";
+      $configModalTitle.text("export config");
       const config = renderer.exportConfig();
-      configTextarea.value = JSON.stringify(config, null, 2);
-      configTextarea.readOnly = true;
-      configCopyBtn.classList.remove("hidden");
-      configApplyBtn.classList.add("hidden");
+      $configTextarea.val(JSON.stringify(config, null, 2));
+      $configTextarea.prop("readOnly", true);
+      $configCopyBtn.removeClass("hidden");
+      $configApplyBtn.addClass("hidden");
     } else {
-      configModalTitle.textContent = "import config";
-      configTextarea.value = "";
-      configTextarea.readOnly = false;
-      configTextarea.placeholder = "Paste your JSON config here...";
-      configCopyBtn.classList.add("hidden");
-      configApplyBtn.classList.remove("hidden");
+      $configModalTitle.text("import config");
+      $configTextarea.val("");
+      $configTextarea.prop("readOnly", false);
+      $configTextarea.attr("placeholder", "Paste your JSON config here...");
+      $configCopyBtn.addClass("hidden");
+      $configApplyBtn.removeClass("hidden");
     }
-    if (configStatus) {
-      configStatus.textContent = "";
-      configStatus.className = "config-status";
-    }
+    $configStatus.text("").attr("class", "config-status");
   }
 
-  function closeConfigModal() {
-    configModal?.classList.add("hidden");
+  /** Close the config modal. */
+  function closeConfigModal(): void {
+    $configModal.addClass("hidden");
   }
 
-  const exportBtn = document.getElementById("exportConfigBtn");
-  if (exportBtn) exportBtn.addEventListener("click", () => openConfigModal("export"));
+  $("#exportConfigBtn").on("click", (): void => openConfigModal("export"));
+  $("#importConfigBtn").on("click", (): void => openConfigModal("import"));
+  $configModalClose.on("click", closeConfigModal);
+  $configModal.on("click", function (this: HTMLElement, e: JQuery.ClickEvent): void {
+    if (e.target === this) closeConfigModal();
+  });
 
-  const importBtn = document.getElementById("importConfigBtn");
-  if (importBtn) importBtn.addEventListener("click", () => openConfigModal("import"));
-
-  if (configModalClose) configModalClose.addEventListener("click", closeConfigModal);
-  if (configModal) {
-    configModal.addEventListener("click", (e) => {
-      if (e.target === configModal) closeConfigModal();
+  $configCopyBtn.on("click", (): void => {
+    const value: string = ($configTextarea.val() as string) ?? "";
+    navigator.clipboard.writeText(value).then((): void => {
+      $configStatus.text("copied to clipboard!").attr("class", "config-status config-status-ok");
     });
-  }
+  });
 
-  if (configCopyBtn && configTextarea) {
-    configCopyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(configTextarea.value).then(() => {
-        if (configStatus) {
-          configStatus.textContent = "copied to clipboard!";
-          configStatus.className = "config-status config-status-ok";
-        }
-      });
-    });
-  }
-
-  if (configApplyBtn && configTextarea) {
-    configApplyBtn.addEventListener("click", () => {
-      try {
-        const raw = JSON.parse(configTextarea.value);
-        clearAllLayers();
-        renderer.importConfig(raw);
-        for (const layer of renderer.getLayers()) {
-          layerCount++;
-          const item = makeHierarchyItem(layer.id, layerCount, deps);
-          layerList.prepend(item);
-        }
-        nodeGraph.syncFromRenderer();
-        if (configStatus) {
-          configStatus.textContent = `loaded ${renderer.getLayers().length} layer(s)`;
-          configStatus.className = "config-status config-status-ok";
-        }
-        setTimeout(closeConfigModal, 800);
-      } catch (err) {
-        if (configStatus) {
-          configStatus.textContent = err instanceof Error ? err.message : "invalid JSON";
-          configStatus.className = "config-status config-status-err";
-        }
+  $configApplyBtn.on("click", (): void => {
+    try {
+      const raw: unknown = JSON.parse(($configTextarea.val() as string) ?? "");
+      clearAllLayers();
+      renderer.importConfig(raw);
+      for (const layer of renderer.getLayers()) {
+        layerCount++;
+        const item: HTMLElement = makeHierarchyItem(layer.id, layerCount, deps);
+        $layerList.prepend(item);
       }
-    });
-  }
+      nodeGraph.syncFromRenderer();
+      $configStatus
+        .text(`loaded ${renderer.getLayers().length} layer(s)`)
+        .attr("class", "config-status config-status-ok");
+      setTimeout(closeConfigModal, 800);
+    } catch (err: unknown) {
+      const message: string = err instanceof Error ? err.message : "invalid JSON";
+      $configStatus.text(message).attr("class", "config-status config-status-err");
+    }
+  });
 
-  // ── Preset gallery ──────────────────────────────────────
-  const presetModal = document.getElementById("presetModal");
-  const presetGrid = document.getElementById("presetGrid");
-  const presetModalClose = document.getElementById("presetModalClose");
-  const openPresetsBtn = document.getElementById("openPresets");
+  // ── Preset gallery ───────────────────────────────────────
+  const $presetModal: JQuery<HTMLElement> = $("#presetModal");
+  const $presetGrid: JQuery<HTMLElement> = $("#presetGrid");
+  const $presetModalClose: JQuery<HTMLElement> = $("#presetModalClose");
 
-  if (presetGrid) {
+  if ($presetGrid.length) {
     for (const preset of presets) {
-      const card = document.createElement("button");
-      card.className = "preset-card";
+      const $card: JQuery<HTMLElement> = $('<button class="preset-card"></button>');
 
       const firstLayer = preset.config.layers[0];
       const layerData = (firstLayer.data ?? {}) as { palette?: PaletteStop[] };
-      const pal = layerData.palette ?? [
+      const pal: PaletteStop[] = layerData.palette ?? [
         [0, 0, 0],
         [1, 1, 1],
       ];
-      const gradStops = pal
-        .map((s, i) => {
-          const pct = pal.length === 1 ? 0 : (i / (pal.length - 1)) * 100;
+      const gradStops: string = pal
+        .map((s: PaletteStop, i: number): string => {
+          const pct: number = pal.length === 1 ? 0 : (i / (pal.length - 1)) * 100;
           return `rgb(${Math.round(s[0] * 255)},${Math.round(s[1] * 255)},${Math.round(s[2] * 255)}) ${pct}%`;
         })
         .join(", ");
 
-      card.innerHTML = `
+      $card.html(`
         <div class="preset-swatch" style="background: linear-gradient(135deg, ${gradStops})"></div>
         <div class="preset-info">
           <span class="preset-name">${preset.name}</span>
           <span class="preset-desc">${preset.description}</span>
           <span class="preset-layers">${preset.config.layers.length} layer${preset.config.layers.length > 1 ? "s" : ""}</span>
         </div>
-      `;
+      `);
 
-      card.addEventListener("click", () => {
+      $card.on("click", (): void => {
         clearAllLayers();
         renderer.importConfig(JSON.parse(JSON.stringify(preset.config)));
         for (const layer of renderer.getLayers()) {
           layerCount++;
-          const item = makeHierarchyItem(layer.id, layerCount, deps);
-          layerList.prepend(item);
+          const item: HTMLElement = makeHierarchyItem(layer.id, layerCount, deps);
+          $layerList.prepend(item);
         }
         nodeGraph.syncFromRenderer();
-        presetModal?.classList.add("hidden");
+        $presetModal.addClass("hidden");
       });
 
-      presetGrid.appendChild(card);
+      $presetGrid.append($card);
     }
   }
 
-  if (openPresetsBtn) {
-    openPresetsBtn.addEventListener("click", () => presetModal?.classList.remove("hidden"));
-  }
-  if (presetModalClose) {
-    presetModalClose.addEventListener("click", () => presetModal?.classList.add("hidden"));
-  }
-  if (presetModal) {
-    presetModal.addEventListener("click", (e) => {
-      if (e.target === presetModal) presetModal.classList.add("hidden");
-    });
-  }
+  $("#openPresets").on("click", (): void => {
+    $presetModal.removeClass("hidden");
+  });
+  $presetModalClose.on("click", (): void => {
+    $presetModal.addClass("hidden");
+  });
+  $presetModal.on("click", function (this: HTMLElement, e: JQuery.ClickEvent): void {
+    if (e.target === this) $presetModal.addClass("hidden");
+  });
 
-  // ── Viewport toolbar: pause, screenshot, fullscreen ─────
-  const pauseBtn = document.getElementById("pauseBtn");
-  const screenshotBtn = document.getElementById("screenshotBtn");
-  const fullscreenBtn = document.getElementById("fullscreenBtn");
+  // ── Viewport toolbar: pause, screenshot, fullscreen ──────
+  const $pauseBtn: JQuery<HTMLElement> = $("#pauseBtn");
+  const $screenshotBtn: JQuery<HTMLElement> = $("#screenshotBtn");
+  const $fullscreenBtn: JQuery<HTMLElement> = $("#fullscreenBtn");
 
-  let paused = false;
+  let paused: boolean = false;
 
-  if (pauseBtn) {
-    pauseBtn.textContent = "\u23F8";
-    pauseBtn.addEventListener("click", () => {
+  if ($pauseBtn.length) {
+    $pauseBtn.text("\u23F8");
+    $pauseBtn.on("click", (): void => {
       paused = !paused;
       if (paused) {
         for (const layer of renderer.getLayers()) {
           renderer.updateLayer(layer.id, { speed: 0 });
         }
-        pauseBtn.textContent = "\u25B6";
-        pauseBtn.classList.add("toolbar-btn-active");
+        $pauseBtn.text("\u25B6").addClass("toolbar-btn-active");
       } else {
         for (const layer of renderer.getLayers()) {
           renderer.updateLayer(layer.id, { animate: true });
         }
-        pauseBtn.textContent = "\u23F8";
-        pauseBtn.classList.remove("toolbar-btn-active");
+        $pauseBtn.text("\u23F8").removeClass("toolbar-btn-active");
         for (const layer of renderer.getLayers()) {
           renderer.updateLayer(layer.id, { speed: layer.speed });
         }
@@ -337,29 +332,27 @@ export default function initDemo() {
     });
   }
 
-  if (screenshotBtn) {
-    screenshotBtn.addEventListener("click", () => {
-      requestAnimationFrame(() => {
-        canvas.toBlob((blob) => {
+  if ($screenshotBtn.length) {
+    $screenshotBtn.on("click", (): void => {
+      requestAnimationFrame((): void => {
+        canvasEl.toBlob((blob: Blob | null): void => {
           if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `rae-noise-${Date.now()}.png`;
-          a.click();
+          const url: string = URL.createObjectURL(blob);
+          const $a: JQuery<HTMLAnchorElement> = $("<a></a>") as JQuery<HTMLAnchorElement>;
+          $a.attr({ href: url, download: `rae-noise-${Date.now()}.png` });
+          $a[0].click();
           URL.revokeObjectURL(url);
         });
       });
     });
   }
 
-  if (fullscreenBtn) {
-    const viewport = document.getElementById("viewport");
-    fullscreenBtn.addEventListener("click", () => {
+  if ($fullscreenBtn.length) {
+    $fullscreenBtn.on("click", (): void => {
       if (document.fullscreenElement) {
         document.exitFullscreen();
       } else {
-        viewport?.requestFullscreen();
+        $("#viewport")[0]?.requestFullscreen();
       }
     });
   }

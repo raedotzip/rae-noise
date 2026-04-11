@@ -13,7 +13,8 @@
       },
       "style": {
         "useConst": "error",
-        "useTemplate": "warn"
+        "useTemplate": "warn",
+        "noInferrableTypes": "off"
       }
     }
   },
