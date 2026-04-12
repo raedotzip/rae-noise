@@ -3,10 +3,6 @@ name: NPM Release
 on:
   workflow_dispatch:
 
-  # Enable this after 1.0
-  # push:
-  #   branches: [main]
-
 permissions:
   contents: write
   pull-requests: write
@@ -18,8 +14,6 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-
-    # Safety gate
     if: ${{ vars.NPM_PUBLISH_READY == 'true' }}
 
     steps:
@@ -29,14 +23,12 @@ jobs:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: "pnpm"
           registry-url: https://registry.npmjs.org
 
