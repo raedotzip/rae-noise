@@ -135,10 +135,16 @@ if (existsSync(wikiDir)) {
 }
 
 // ---------------------------------------------------------------------------
-// Step 4: copy wiki chrome (Home.md, _Sidebar.md, …) and inject API list.
+// Step 4: copy wiki chrome (Home.md, _Sidebar.md, _Footer.md, …) and inject
+// API list, guide list, and the commit SHA the build came from.
 // ---------------------------------------------------------------------------
 
 const apiListMarkdown = buildApiListMarkdown(pages);
+const guideListMarkdown = buildGuideListMarkdown(guideIndex);
+
+// GITHUB_SHA is set in CI by the workflow; fall back to "local" for dev runs.
+const commitShaFull = process.env.GITHUB_SHA || "local";
+const commitShaShort = commitShaFull === "local" ? "local" : commitShaFull.slice(0, 7);
 
 if (existsSync(WIKI_CHROME_DIR)) {
   for (const file of readdirSync(WIKI_CHROME_DIR)) {
@@ -146,7 +152,9 @@ if (existsSync(WIKI_CHROME_DIR)) {
     const sourcePath = join(WIKI_CHROME_DIR, file);
     let body = readFileSync(sourcePath, "utf8");
     body = body.replace("<!-- API_PAGES -->", apiListMarkdown);
-    body = body.replace("<!-- GUIDE_PAGES -->", buildGuideListMarkdown(guideIndex));
+    body = body.replace("<!-- GUIDE_PAGES -->", guideListMarkdown);
+    body = body.replaceAll("<!-- COMMIT_SHA_SHORT -->", commitShaShort);
+    body = body.replaceAll("<!-- COMMIT_SHA_FULL -->", commitShaFull);
     writeFileSync(join(wikiDir, file), body);
   }
 }
