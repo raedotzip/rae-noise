@@ -4,7 +4,30 @@
   "version": "0.0.0",
   "type": "module",
   "license": "Apache-2.0",
-  "author": "Raegan Scheet",
+  "author": "Raegan Grace Scheet",
+  "homepage": "http://raedotzip.github.io/rae-noise/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raedotzip/rae-noise"
+  },
+  "bugs": {
+    "url": "https://github.com/raedotzip/rae-noise/issues"
+  },
+  "keywords": [
+    "webgl",
+    "opengl",
+    "noise",
+    "procedural",
+    "shader",
+    "graphics",
+    "visuals",
+    "background",
+    "creative-coding",
+    "generative-art",
+    "typescript",
+    "frontend"
+  ],
+  "sideEffects": false,
   "scripts": {
     "dev": "vite",
     "build": "vite build",

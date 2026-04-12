@@ -1,10 +1,33 @@
 {
   "name": "rae-noise",
+  "type": "module",
   "version": "1.0.0",
   "description": "Generate noise values for cool website visuals",
   "license": "Apache-2.0",
-  "author": "Raegan Scheet",
-  "type": "module",
+  "author": "Raegan Grace Scheet",
+  "homepage": "http://raedotzip.github.io/rae-noise/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raedotzip/rae-noise"
+  },
+  "bugs": {
+    "url": "https://github.com/raedotzip/rae-noise/issues"
+  },
+  "keywords": [
+    "webgl",
+    "opengl",
+    "noise",
+    "procedural",
+    "shader",
+    "graphics",
+    "visuals",
+    "background",
+    "creative-coding",
+    "generative-art",
+    "typescript",
+    "frontend"
+  ],
+  "sideEffects": false,
 
   "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.js",

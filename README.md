@@ -10,6 +10,14 @@ This repo is a monorepo containing the core library and a live demo website.
 
 ---
 
+## ✨ Features
+
+- 🎨 Real-time WebGL noise rendering
+- 🧩 Plugin-based architecture (extensible visuals)
+- ⚡ Designed for performance (FBO + shader composition)
+- 🛠 Built-in noise types: Perlin, Simplex, Worley, FBM
+- 🌐 Designed for modern web apps
+
 ## Packages
 
 | Package | Description |
