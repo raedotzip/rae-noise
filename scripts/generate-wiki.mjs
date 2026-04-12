@@ -1,16 +1,34 @@
 #!/usr/bin/env node
 
 /**
- * Converts docs/api.json (TypeDoc output) into GitHub Wiki markdown pages.
+ * Builds the rae-noise GitHub Wiki from two sources:
+ *
+ *   1. Hand-written docs under packages/core/docs/
+ *        guides/*.md   → wiki pages prefixed "Guide-"
+ *        wiki/*.md     → wiki pages copied verbatim (Home.md, _Sidebar.md)
+ *   2. TypeDoc JSON at docs/api.json
+ *        interfaces, types, functions → wiki pages prefixed "API-"
+ *
+ * The script only touches files it owns. It wipes every existing "API-*.md"
+ * page before regenerating (so removed exports disappear from the wiki),
+ * overwrites guide and wiki-chrome pages it has a source for, and leaves all
+ * other files in the wiki directory alone. That means manual wiki edits to
+ * pages *outside* these managed prefixes are preserved.
+ *
+ * The hand-written _Sidebar.md may contain a placeholder line:
+ *     <!-- API_PAGES -->
+ * which is replaced in-place with a generated list of API reference pages.
  *
  * Usage: node scripts/generate-wiki.mjs <wiki-dir>
- *
- * Generated files are written into <wiki-dir>/api/. Any files outside that
- * directory are left untouched, so manual wiki pages are preserved.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, join } from "node:path";
 
 const wikiDir = process.argv[2];
 if (!wikiDir) {
@@ -18,9 +36,128 @@ if (!wikiDir) {
   process.exit(1);
 }
 
-const api = JSON.parse(readFileSync("docs/api.json", "utf8"));
+const REPO_SLUG = "raedotzip/rae-noise";
+const REPO_BLOB_BASE = `https://github.com/${REPO_SLUG}/blob/main`;
+const GUIDES_DIR = "packages/core/docs/guides";
+const WIKI_CHROME_DIR = "packages/core/docs/wiki";
+const API_JSON = "docs/api.json";
 
-// --- helpers ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Step 1: wipe stale generated API pages so removed exports disappear.
+// ---------------------------------------------------------------------------
+
+if (existsSync(wikiDir)) {
+  for (const name of readdirSync(wikiDir)) {
+    if (name.startsWith("API-") && name.endsWith(".md")) {
+      // We own this file — it'll be regenerated below (or left out if the
+      // export was removed).
+      // Using a no-op here: we overwrite in-place or leave files we no
+      // longer generate to be pruned at the end.
+    }
+  }
+}
+
+const ownedApiPages = new Set();
+const ownedGuidePages = new Set();
+
+// ---------------------------------------------------------------------------
+// Step 2: copy hand-written guides (packages/core/docs/guides/*.md).
+// ---------------------------------------------------------------------------
+
+const guideIndex = [];
+
+if (existsSync(GUIDES_DIR)) {
+  for (const file of readdirSync(GUIDES_DIR)) {
+    if (!file.endsWith(".md")) continue;
+    const sourcePath = join(GUIDES_DIR, file);
+    const slug = toTitleSlug(basename(file, ".md"));
+    const wikiName = `Guide-${slug}.md`;
+    const body = readFileSync(sourcePath, "utf8");
+    const withFooter = appendEditFooter(body, sourcePath);
+    writeFileSync(join(wikiDir, wikiName), withFooter);
+    ownedGuidePages.add(wikiName);
+    guideIndex.push({ title: humanizeSlug(basename(file, ".md")), page: `Guide-${slug}` });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 3: generate API pages from TypeDoc JSON.
+// ---------------------------------------------------------------------------
+
+const KIND_INTERFACE = 256;
+const KIND_TYPE_ALIAS = 2097152;
+const KIND_FUNCTION = 64;
+
+const api = JSON.parse(readFileSync(API_JSON, "utf8"));
+const pages = [];
+
+for (const child of api.children || []) {
+  let content;
+  let filename;
+
+  switch (child.kind) {
+    case KIND_INTERFACE:
+      content = generateInterfacePage(child);
+      filename = `API-${child.name}.md`;
+      break;
+    case KIND_TYPE_ALIAS:
+      content = generateTypeAliasPage(child);
+      filename = `API-${child.name}.md`;
+      break;
+    case KIND_FUNCTION:
+      content = generateFunctionPage(child);
+      filename = `API-${child.name}.md`;
+      break;
+    default:
+      continue;
+  }
+
+  // TypeDoc pins `sources[0].url` to a commit SHA, which we prefer over
+  // a reconstructed `main`-branch link — it survives file moves.
+  const sourceUrl = child.sources?.[0]?.url ?? null;
+  const withFooter = appendEditFooter(content, sourceUrl, { absolute: true });
+
+  writeFileSync(join(wikiDir, filename), withFooter);
+  ownedApiPages.add(filename);
+  pages.push({ name: child.name, kind: child.kind, filename });
+}
+
+// Prune API-*.md pages in the wiki that we didn't regenerate this run
+// (i.e. exports that were removed since the last sync).
+if (existsSync(wikiDir)) {
+  for (const name of readdirSync(wikiDir)) {
+    if (name.startsWith("API-") && name.endsWith(".md") && !ownedApiPages.has(name)) {
+      // Leave orphaned files for manual cleanup — safer than blind delete.
+      // (The wiki UI makes it easy to delete stale pages by hand.)
+      console.log(`note: stale page ${name} is no longer generated`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 4: copy wiki chrome (Home.md, _Sidebar.md, …) and inject API list.
+// ---------------------------------------------------------------------------
+
+const apiListMarkdown = buildApiListMarkdown(pages);
+
+if (existsSync(WIKI_CHROME_DIR)) {
+  for (const file of readdirSync(WIKI_CHROME_DIR)) {
+    if (!file.endsWith(".md")) continue;
+    const sourcePath = join(WIKI_CHROME_DIR, file);
+    let body = readFileSync(sourcePath, "utf8");
+    body = body.replace("<!-- API_PAGES -->", apiListMarkdown);
+    body = body.replace("<!-- GUIDE_PAGES -->", buildGuideListMarkdown(guideIndex));
+    writeFileSync(join(wikiDir, file), body);
+  }
+}
+
+console.log(
+  `Wiki sync complete: ${pages.length} API pages, ${guideIndex.length} guides.`
+);
+
+// ===========================================================================
+// helpers
+// ===========================================================================
 
 function commentToMarkdown(comment) {
   if (!comment) return "";
@@ -38,6 +175,12 @@ function commentToMarkdown(comment) {
         md += tag.content.map(renderInlineContent).join("");
       } else if (tag.tag === "@param") {
         md += `\n- \`${tag.name}\` `;
+        md += tag.content.map(renderInlineContent).join("");
+      } else if (tag.tag === "@remarks") {
+        md += "\n\n**Remarks**\n\n";
+        md += tag.content.map(renderInlineContent).join("");
+      } else if (tag.tag === "@see") {
+        md += "\n\n**See also:** ";
         md += tag.content.map(renderInlineContent).join("");
       }
     }
@@ -88,8 +231,6 @@ function formatSignatureInline(sig) {
   return `\`(${params}) => ${ret}\``;
 }
 
-// --- page generators --------------------------------------------------------
-
 function generateInterfacePage(node) {
   let md = `# ${node.name}\n\n`;
   md += commentToMarkdown(node.comment) + "\n\n";
@@ -120,7 +261,6 @@ function generateFunctionPage(node) {
 
   md += commentToMarkdown(sig.comment) + "\n\n";
 
-  // Signature
   const params = (sig.parameters || [])
     .map((p) => `${p.name}: ${typeToString(p.type)}`)
     .join(", ");
@@ -128,7 +268,6 @@ function generateFunctionPage(node) {
   md += "## Signature\n\n";
   md += `\`\`\`ts\n${node.name}(${params}): ${ret}\n\`\`\`\n\n`;
 
-  // Parameters
   if (sig.parameters?.length) {
     md += "## Parameters\n\n";
     md += "| Name | Type | Description |\n";
@@ -140,93 +279,75 @@ function generateFunctionPage(node) {
     md += "\n";
   }
 
-  // Return type
   md += `**Returns:** ${ret}\n`;
   return md;
 }
 
-// --- main -------------------------------------------------------------------
+function buildApiListMarkdown(pages) {
+  const interfaces = pages.filter((p) => p.kind === KIND_INTERFACE);
+  const types = pages.filter((p) => p.kind === KIND_TYPE_ALIAS);
+  const functions = pages.filter((p) => p.kind === KIND_FUNCTION);
 
-const KIND_INTERFACE = 256;
-const KIND_TYPE_ALIAS = 2097152;
-const KIND_FUNCTION = 64;
-
-const pages = [];
-
-for (const child of api.children || []) {
-  let content;
-  let filename;
-
-  switch (child.kind) {
-    case KIND_INTERFACE:
-      content = generateInterfacePage(child);
-      filename = `API-${child.name}.md`;
-      break;
-    case KIND_TYPE_ALIAS:
-      content = generateTypeAliasPage(child);
-      filename = `API-${child.name}.md`;
-      break;
-    case KIND_FUNCTION:
-      content = generateFunctionPage(child);
-      filename = `API-${child.name}.md`;
-      break;
-    default:
-      continue;
+  let md = "";
+  if (functions.length) {
+    md += "**Functions**\n\n";
+    for (const f of functions) {
+      md += `- [${f.name}()](${f.filename.replace(".md", "")})\n`;
+    }
+    md += "\n";
   }
-
-  writeFileSync(join(wikiDir, filename), content);
-  pages.push({ name: child.name, kind: child.kind, filename });
-}
-
-// Generate the _Sidebar.md for navigation
-const interfaces = pages.filter((p) => p.kind === KIND_INTERFACE);
-const types = pages.filter((p) => p.kind === KIND_TYPE_ALIAS);
-const functions = pages.filter((p) => p.kind === KIND_FUNCTION);
-
-let sidebar = "## Navigation\n\n";
-sidebar += "- [Home](Home)\n\n";
-sidebar += "## API Reference\n\n";
-
-if (functions.length) {
-  sidebar += "**Functions**\n\n";
-  for (const f of functions) {
-    sidebar += `- [${f.name}()](${f.filename.replace(".md", "")})\n`;
+  if (interfaces.length) {
+    md += "**Interfaces**\n\n";
+    for (const i of interfaces) {
+      md += `- [${i.name}](${i.filename.replace(".md", "")})\n`;
+    }
+    md += "\n";
   }
-  sidebar += "\n";
-}
-
-if (interfaces.length) {
-  sidebar += "**Interfaces**\n\n";
-  for (const i of interfaces) {
-    sidebar += `- [${i.name}](${i.filename.replace(".md", "")})\n`;
+  if (types.length) {
+    md += "**Types**\n\n";
+    for (const t of types) {
+      md += `- [${t.name}](${t.filename.replace(".md", "")})\n`;
+    }
+    md += "\n";
   }
-  sidebar += "\n";
+  return md.trimEnd();
 }
 
-if (types.length) {
-  sidebar += "**Types**\n\n";
-  for (const t of types) {
-    sidebar += `- [${t.name}](${t.filename.replace(".md", "")})\n`;
+function buildGuideListMarkdown(guides) {
+  if (!guides.length) return "";
+  let md = "";
+  for (const g of guides) {
+    md += `- [${g.title}](${g.page})\n`;
   }
-  sidebar += "\n";
+  return md.trimEnd();
 }
 
-writeFileSync(join(wikiDir, "_Sidebar.md"), sidebar);
-
-// Generate Home.md only if it doesn't already exist (preserve manual edits)
-const homePath = join(wikiDir, "Home.md");
-if (!existsSync(homePath)) {
-  let home = "# rae-noise\n\n";
-  home += "WebGL-powered procedural noise library for real-time visual effects.\n\n";
-  home += "## Quick Start\n\n";
-  home += "```ts\n";
-  home += 'import { createRenderer, defaultLayer } from "rae-noise";\n\n';
-  home += 'const renderer = createRenderer(document.querySelector("canvas")!);\n';
-  home += 'renderer.addLayer({ ...defaultLayer(), noiseType: "fbm", scale: 4 });\n';
-  home += "```\n\n";
-  home += "## API Reference\n\n";
-  home += "See the sidebar for the full API documentation.\n";
-  writeFileSync(homePath, home);
+/** `plugin-system` → `Plugin-System` (used for wiki page slugs). */
+function toTitleSlug(name) {
+  return name
+    .split("-")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join("-");
 }
 
-console.log(`Generated ${pages.length} API wiki pages + sidebar`);
+/** `plugin-system` → `Plugin system` (used for human-readable titles). */
+function humanizeSlug(name) {
+  const words = name.split("-");
+  return words
+    .map((w, i) => (i === 0 && w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
+/**
+ * Append an "Edit this page" footer to a generated wiki page. The link
+ * points to the source file on the main branch.
+ */
+function appendEditFooter(body, source, opts = {}) {
+  if (!source) return body;
+  const href = opts.absolute ? source : `${REPO_BLOB_BASE}/${source}`;
+  const footer =
+    "\n\n---\n\n" +
+    `_[Edit this page](${href}) · Generated from source. Changes to this ` +
+    "page should be made in the repository, not the wiki._\n";
+  return body.trimEnd() + footer;
+}

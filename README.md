@@ -63,7 +63,9 @@ rae-noise/
 │   │   │   ├── config/         # JSON envelope serializer (exportConfig / importConfig)
 │   │   │   └── renderer/       # Renderer orchestrator, defaults, scene graph resolver
 │   │   ├── test/               # vitest unit tests
-│   │   ├── docs/               # authoring guides (e.g. adding-a-plugin.md)
+│   │   ├── docs/
+│   │   │   ├── guides/         # long-form authoring guides (synced to the wiki)
+│   │   │   └── wiki/           # wiki chrome: Home.md, _Sidebar.md
 │   │   └── rollup.config.ts
 │   └── website/                # demo site — vanilla TS + Handlebars, deployed to Pages
 │       ├── src/
@@ -83,7 +85,7 @@ rae-noise/
 
 ### How the core library is organized
 
-The renderer is **plugin-driven**: each visual type (noise today, particles and sprites later) is a self-contained module under `src/plugin/` that owns its own shaders, per-layer GPU state, config schema, and compiled output. Adding a new visual type is one new plugin file with zero changes to shared code — see [`packages/core/docs/adding-a-plugin.md`](./packages/core/docs/adding-a-plugin.md).
+The renderer is **plugin-driven**: each visual type (noise today, particles and sprites later) is a self-contained module under `src/plugin/` that owns its own shaders, per-layer GPU state, config schema, and compiled output. Adding a new visual type is one new plugin file with zero changes to shared code — see [`packages/core/docs/guides/plugin-system.md`](./packages/core/docs/guides/plugin-system.md).
 
 | Area | Purpose |
 | --- | --- |

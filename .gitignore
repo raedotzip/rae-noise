@@ -143,5 +143,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# Generated docs (TypeDoc)
-docs/
+# Generated docs (TypeDoc) — only the repo-root docs/ dir.
+# packages/core/docs/ holds hand-written guides + wiki chrome and
+# must stay tracked, so we anchor this rule with a leading slash.
+/docs/
