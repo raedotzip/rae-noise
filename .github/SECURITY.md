@@ -4,6 +4,7 @@
 
 If you discover a security issue, please report it responsibly:
 
+* Privately report the vulnerability via github vulnerability reporting (preferred)
 * Email: [camscheet@gmail.com](mailto:camscheet@gmail.com)
 
 Include:
