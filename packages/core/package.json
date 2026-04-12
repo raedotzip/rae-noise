@@ -2,7 +2,7 @@
   "name": "rae-noise",
   "version": "1.0.0",
   "description": "Generate noise values for cool website visuals",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Raegan Scheet",
   "type": "module",
 
