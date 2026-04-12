@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 # packages/core/docs/ holds hand-written guides + wiki chrome and
 # must stay tracked, so we anchor this rule with a leading slash.
 /docs/
+
+# Turborepo
+.turbo

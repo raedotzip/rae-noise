@@ -1,9 +1,8 @@
-import { defineConfig } from "vitest/config";
+import { mergeConfig } from "vitest/config";
+import base from "../../vitest.base";
 
-export default defineConfig({
+export default mergeConfig(base, {
   test: {
-    environment: "happy-dom",
-    setupFiles: ["./test/setup.ts"],
     include: ["test/**/*.test.ts"],
   },
 });

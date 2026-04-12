@@ -44,7 +44,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build core library
-        run: pnpm build:core
+        run: pnpm build --filter=rae-noise
 
       - name: Create release PR or publish
         uses: changesets/action@v1
