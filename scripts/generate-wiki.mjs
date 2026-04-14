@@ -87,6 +87,7 @@ if (existsSync(GUIDES_DIR)) {
 const KIND_INTERFACE = 256;
 const KIND_TYPE_ALIAS = 2097152;
 const KIND_FUNCTION = 64;
+const KIND_METHOD = 2048;
 
 const api = JSON.parse(readFileSync(API_JSON, "utf8"));
 const pages = [];
@@ -167,41 +168,73 @@ console.log(
 // helpers
 // ===========================================================================
 
-function commentToMarkdown(comment) {
+function commentToMarkdown(comment, context = {}) {
   if (!comment) return "";
+
   let md = "";
+
   if (comment.summary) {
-    md += comment.summary.map(renderInlineContent).join("");
+    md += comment.summary
+      .map((p) => renderInlineContent(p, context))
+      .join("");
   }
+
   if (comment.blockTags) {
     for (const tag of comment.blockTags) {
       if (tag.tag === "@example") {
         md += "\n\n**Example**\n\n";
-        md += tag.content.map(renderInlineContent).join("");
+        md += tag.content.map(p => renderInlineContent(p, context)).join("");
       } else if (tag.tag === "@returns") {
         md += "\n\n**Returns** ";
-        md += tag.content.map(renderInlineContent).join("");
+        md += tag.content.map(p => renderInlineContent(p, context)).join("");
       } else if (tag.tag === "@param") {
         md += `\n- \`${tag.name}\` `;
-        md += tag.content.map(renderInlineContent).join("");
+        md += tag.content.map(p => renderInlineContent(p, context)).join("");
       } else if (tag.tag === "@remarks") {
         md += "\n\n**Remarks**\n\n";
-        md += tag.content.map(renderInlineContent).join("");
+        md += tag.content.map(p => renderInlineContent(p, context)).join("");
       } else if (tag.tag === "@see") {
         md += "\n\n**See also:** ";
-        md += tag.content.map(renderInlineContent).join("");
+        md += tag.content.map(p => renderInlineContent(p, context)).join("");
       }
     }
   }
+
   return md;
 }
 
-function renderInlineContent(part) {
-  if (part.kind === "text") return part.text;
-  if (part.kind === "code") return part.text;
-  if (part.kind === "inline-tag" && part.tag === "@link") {
-    return `[${part.text}](API-${part.text})`;
+function autoLinkText(text, context = {}) {
+  if (!context?.members) return text;
+
+  for (const name of context.members) {
+    if (name.length < 3) continue;
+
+    const regex = new RegExp(`\\b${name}\\b`, "g");
+    text = text.replace(regex, `[${name}](#${slugify(name)})`);
   }
+
+  return text;
+}
+
+function renderInlineContent(part, context = {}) {
+  if (part.kind === "text") {
+    return autoLinkText(part.text, context);
+  }
+
+  if (part.kind === "code") {
+    return `\`${part.text}\``;
+  }
+
+  if (part.kind === "inline-tag" && part.tag === "@link") {
+    const name = part.text;
+
+    if (context?.members?.has(name)) {
+      return `[${name}](#${slugify(name)})`;
+    }
+
+    return `[${name}](API-${name})`;
+  }
+
   return part.text || "";
 }
 
@@ -239,20 +272,363 @@ function formatSignatureInline(sig) {
   return `\`(${params}) => ${ret}\``;
 }
 
-function generateInterfacePage(node) {
-  let md = `# ${node.name}\n\n`;
-  md += commentToMarkdown(node.comment) + "\n\n";
+function stripParamTags(comment) {
+  if (!comment?.blockTags) return comment;
 
-  if (node.children?.length) {
-    md += "## Properties\n\n";
-    for (const prop of node.children) {
-      md += `### \`${prop.name}\`\n\n`;
-      md += `**Type:** ${typeToString(prop.type)}\n\n`;
-      md += commentToMarkdown(prop.comment) + "\n\n";
+  return {
+    ...comment,
+    blockTags: comment.blockTags.filter((t) => t.tag !== "@param"),
+  };
+}
+
+function slugify(str) {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function renderSourceLink(node) {
+  const src = node.sources?.[0];
+  if (!src?.url) return "";
+
+  const line = src.line ? `#L${src.line}` : "";
+  return `_[Source](${src.url}${line})_\n\n`;
+}
+
+function renderInterfaceMember(prop, context) {
+  let md = "";
+  const KIND_METHOD = 2048;
+
+  md += `### \`${prop.name}\`\n\n`;
+
+  // --- source link ---
+  md += renderSourceLink(prop);
+
+  if ((prop.kind === KIND_METHOD || prop.signatures) && prop.signatures?.length) {
+    const sigs = prop.signatures;
+
+    // --- overloads ---
+    md += "```ts\n";
+
+    for (const sig of sigs) {
+      const params = (sig.parameters || [])
+        .map((p) => `${p.name}: ${typeToString(p.type)}`)
+        .join(", ");
+
+      const ret = sig.type ? typeToString(sig.type) : "`void`";
+
+      md += `${prop.name}(${params}): ${ret}\n`;
+    }
+
+    md += "```\n\n";
+
+    const sig = sigs[0];
+
+    // --- parameters ---
+    if (sig.parameters?.length) {
+      md += "**Parameters**\n\n";
+      md += "| Name | Type | Description |\n";
+      md += "|------|------|-------------|\n";
+
+      for (const p of sig.parameters) {
+        const desc = commentToMarkdown(p.comment, context)
+          .replace(/\n/g, " ")
+          .trim();
+
+        md += `| \`${p.name}\` | ${typeToString(p.type)} | ${desc} |\n`;
+      }
+
+      md += "\n";
+    }
+
+    md += commentToMarkdown(
+      stripParamTags(sig.comment || prop.comment),
+      context
+    ) + "\n\n";
+
+    return md;
+  }
+
+  // --- property ---
+  md += `**Type:** ${typeToString(prop.type)}\n\n`;
+  md += commentToMarkdown(prop.comment, context) + "\n\n";
+
+  return md;
+}
+
+function extractMethodGroups(comment) {
+  if (!comment?.blockTags) return { groups: {}, descriptions: {} };
+
+  const remarks = comment.blockTags.find((t) => t.tag === "@remarks");
+  if (!remarks) return { groups: {}, descriptions: {} };
+
+  const text = remarks.content.map(p => renderInlineContent(p)).join("");
+
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const groups = {};
+  const descriptions = {};
+
+  let currentGroup = null;
+  let buffer = [];
+
+  for (const line of lines) {
+    const isMethodLine = /^(\w+)\s*[—-]\s*/.test(line);
+
+    if (!isMethodLine) {
+      if (currentGroup && buffer.length) {
+        descriptions[currentGroup] = buffer.join(" ");
+      }
+
+      currentGroup = line;
+      groups[currentGroup] = [];
+      buffer = [];
+      continue;
+    }
+
+    const match = line.match(/^(\w+)\s*[—-]\s*(.*)/);
+    if (match && currentGroup) {
+      const methodName = match[1];
+      const desc = match[2];
+
+      groups[currentGroup].push(methodName);
+      if (desc) buffer.push(desc);
     }
   }
 
+  if (currentGroup && buffer.length) {
+    descriptions[currentGroup] = buffer.join(" ");
+  }
+
+  return { groups, descriptions };
+}
+
+function extractMethodGroups(comment) {
+  if (!comment?.blockTags) return { groups: {}, descriptions: {} };
+
+  const remarks = comment.blockTags.find((t) => t.tag === "@remarks");
+  if (!remarks) return { groups: {}, descriptions: {} };
+
+  const text = remarks.content.map(renderInlineContent).join("");
+
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const groups = {};
+  const descriptions = {};
+
+  let currentGroup = null;
+  let buffer = [];
+
+  for (const line of lines) {
+    const isMethodLine = /^(\w+)\s*[—-]\s*/.test(line);
+
+    // New section header
+    if (!isMethodLine) {
+      if (currentGroup && buffer.length) {
+        descriptions[currentGroup] = buffer.join(" ");
+      }
+
+      currentGroup = line;
+      groups[currentGroup] = [];
+      buffer = [];
+      continue;
+    }
+
+    // Method line
+    const match = line.match(/^(\w+)\s*[—-]\s*(.*)/);
+    if (match && currentGroup) {
+      const methodName = match[1];
+      const desc = match[2];
+
+      groups[currentGroup].push(methodName);
+
+      if (desc) buffer.push(desc);
+    }
+  }
+
+  if (currentGroup && buffer.length) {
+    descriptions[currentGroup] = buffer.join(" ");
+  }
+
+  return { groups, descriptions };
+}
+
+function generateInterfacePage(node) {
+  let md = `# ${node.name}\n\n`;
+
+  // --- member index for linking ---
+  const memberNames = new Set(
+    (node.children || []).map((c) => c.name)
+  );
+  const context = { members: memberNames };
+
+  // --- badges ---
+  md += renderBadges("interface") + "\n\n";
+
+  // --- description ---
+  md += commentToMarkdown(node.comment, context) + "\n\n";
+
+  if (!node.children?.length) return md;
+
+  // --- grouping ---
+  const { groups, descriptions } = extractMethodGroups(node.comment);
+
+  const methodToGroup = {};
+  for (const [group, methods] of Object.entries(groups)) {
+    for (const m of methods) {
+      methodToGroup[m] = group;
+    }
+  }
+
+  const grouped = {};
+  const ungrouped = [];
+
+  for (const prop of node.children) {
+    const group = methodToGroup[prop.name];
+
+    if (group) {
+      if (!grouped[group]) grouped[group] = [];
+      grouped[group].push(prop);
+    } else {
+      ungrouped.push(prop);
+    }
+  }
+
+  // --- mini TOC ---
+  md += renderMiniToc(grouped, ungrouped);
+
+  md += "## API\n\n";
+
+  // --- grouped sections ---
+  for (const [groupName, props] of Object.entries(grouped)) {
+    md += `<details open>\n<summary><strong>${groupName}</strong></summary>\n\n`;
+
+    if (descriptions[groupName]) {
+      md += `${descriptions[groupName]}\n\n`;
+    }
+
+    for (const prop of props) {
+      md += renderInterfaceMember(prop, context);
+    }
+
+    md += "</details>\n\n";
+  }
+
+  // --- other ---
+  if (ungrouped.length) {
+    md += `<details>\n<summary><strong>Other</strong></summary>\n\n`;
+
+    for (const prop of ungrouped) {
+      md += renderInterfaceMember(prop, context);
+    }
+
+    md += "</details>\n\n";
+  }
+
   return md;
+}
+
+function generateInterfacePage(node) {
+  let md = `# ${node.name}\n\n`;
+
+  // --- Badges ---
+  md += renderBadges("interface");
+  md += "\n\n";
+
+  // --- Description ---
+  md += commentToMarkdown(node.comment) + "\n\n";
+
+  if (!node.children?.length) return md;
+
+  // --- Extract grouping ---
+  const { groups, descriptions } = extractMethodGroups(node.comment);
+
+  const methodToGroup = {};
+  for (const [group, methods] of Object.entries(groups)) {
+    for (const m of methods) {
+      methodToGroup[m] = group;
+    }
+  }
+
+  const grouped = {};
+  const ungrouped = [];
+
+  for (const prop of node.children) {
+    const group = methodToGroup[prop.name];
+
+    if (group) {
+      if (!grouped[group]) grouped[group] = [];
+      grouped[group].push(prop);
+    } else {
+      ungrouped.push(prop);
+    }
+  }
+
+  // --- Mini sidebar ---
+  md += renderMiniToc(grouped, ungrouped);
+
+  md += "## API\n\n";
+
+  // --- Sections ---
+  for (const [groupName, props] of Object.entries(grouped)) {
+    md += `<details open>\n<summary><strong>${groupName}</strong></summary>\n\n`;
+
+    if (descriptions[groupName]) {
+      md += `${descriptions[groupName]}\n\n`;
+    }
+
+    for (const prop of props) {
+      md += renderInterfaceMember(prop);
+    }
+
+    md += "</details>\n\n";
+  }
+
+  if (ungrouped.length) {
+    md += `<details>\n<summary><strong>Other</strong></summary>\n\n`;
+
+    for (const prop of ungrouped) {
+      md += renderInterfaceMember(prop);
+    }
+
+    md += "</details>\n\n";
+  }
+
+  return md;
+}
+
+function renderMiniToc(grouped, ungrouped) {
+  let md = "> **On this page**\n>\n";
+
+  for (const group of Object.keys(grouped)) {
+    md += `> - [${group}](#${slugify(group)})\n`;
+  }
+
+  if (ungrouped.length) {
+    md += `> - [Other](#other)\n`;
+  }
+
+  md += "\n";
+
+  return md;
+}
+
+function renderBadges(kind) {
+  const map = {
+    interface: "Interface",
+    function: "Function",
+    type: "Type",
+  };
+
+  const label = map[kind] || kind;
+  return `> **${label}** · API Reference`;
 }
 
 function generateTypeAliasPage(node) {
@@ -264,6 +640,7 @@ function generateTypeAliasPage(node) {
 
 function generateFunctionPage(node) {
   let md = `# ${node.name}()\n\n`;
+  md += renderBadges("function") + "\n\n";
   const sig = node.signatures?.[0];
   if (!sig) return md;
 
