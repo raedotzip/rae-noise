@@ -407,59 +407,6 @@ function extractMethodGroups(comment) {
   return { groups, descriptions };
 }
 
-function extractMethodGroups(comment) {
-  if (!comment?.blockTags) return { groups: {}, descriptions: {} };
-
-  const remarks = comment.blockTags.find((t) => t.tag === "@remarks");
-  if (!remarks) return { groups: {}, descriptions: {} };
-
-  const text = remarks.content.map(renderInlineContent).join("");
-
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const groups = {};
-  const descriptions = {};
-
-  let currentGroup = null;
-  let buffer = [];
-
-  for (const line of lines) {
-    const isMethodLine = /^(\w+)\s*[—-]\s*/.test(line);
-
-    // New section header
-    if (!isMethodLine) {
-      if (currentGroup && buffer.length) {
-        descriptions[currentGroup] = buffer.join(" ");
-      }
-
-      currentGroup = line;
-      groups[currentGroup] = [];
-      buffer = [];
-      continue;
-    }
-
-    // Method line
-    const match = line.match(/^(\w+)\s*[—-]\s*(.*)/);
-    if (match && currentGroup) {
-      const methodName = match[1];
-      const desc = match[2];
-
-      groups[currentGroup].push(methodName);
-
-      if (desc) buffer.push(desc);
-    }
-  }
-
-  if (currentGroup && buffer.length) {
-    descriptions[currentGroup] = buffer.join(" ");
-  }
-
-  return { groups, descriptions };
-}
-
 function generateInterfacePage(node) {
   let md = `# ${node.name}\n\n`;
 
