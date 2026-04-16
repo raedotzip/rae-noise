@@ -1,306 +1,229 @@
 import $ from "jquery";
 import Handlebars from "handlebars";
-import type { BlendMode, FlowType, NoiseLayer, NoiseType } from "rae-noise";
+import type { BlendMode, FlowType, NoiseLayerConfig, NoiseType, PaletteStop } from "rae-noise";
+import { dispatch } from "../store";
 import { swatchGradient } from "./color";
 import { makeChipGroup, makeDial, makePaletteEditor, makeSlider, makeToggleRow } from "./widgets";
 
-/** Dependencies shared between hierarchy items and the inspector panel. */
-export interface LayerCardDeps {
-  /** The raw DOM element for the layer list (hierarchy panel). */
-  layerList: HTMLElement;
-  /** Subset of the renderer API needed by layer cards. */
-  renderer: {
-    getLayers: () => NoiseLayer[];
-    updateLayer: (id: string, patch: Partial<NoiseLayer>) => void;
-    removeLayer: (id: string) => void;
-    reorderLayers: (ids: string[]) => void;
-  };
-  /** Called after any mutation so the node graph stays in sync. */
-  onSync: () => void;
-  /** Called when a layer is selected in the hierarchy. */
-  onSelect: (id: string) => void;
-  /** Called when a layer is removed from the hierarchy. */
-  onRemove: (id: string) => void;
-}
-
-// ── Hierarchy item (left panel) ─────────────────────────
+// ── Hierarchy item (left panel) ─────────────────────────────────────────────
 
 /**
- * Creates a compact hierarchy row for a layer — swatch, name, visibility,
- * drag handle. Clicking selects it (delegates to deps.onSelect).
+ * Create a compact hierarchy row for a layer.
+ *
+ * All mutations go through dispatch() — this element never calls the
+ * renderer directly. It reads the layer's initial values from the
+ * state snapshot passed in and stays in sync via the store subscriber
+ * in demo/index.ts.
  */
-export function makeHierarchyItem(
-  id: string,
-  layerNum: number,
-  deps: LayerCardDeps
-): HTMLElement {
-  const { renderer, onSync, onSelect, onRemove } = deps;
-  const layer: NoiseLayer | undefined = renderer.getLayers().find((l: NoiseLayer) => l.id === id);
-  if (!layer) throw new Error(`Layer ${id} not found`);
-  let visible: boolean = layer.visible;
-
-  const $item: JQuery<HTMLElement> = $('<div class="hierarchy-item"></div>');
+export function makeHierarchyItem(layer: NoiseLayerConfig, layerListEl: HTMLElement): HTMLElement {
+  const { id } = layer;
+  const $item = $('<div class="hierarchy-item"></div>');
   $item.attr("data-id", id);
 
-  // Build from the existing layer-header partial
-  const headerSrc: string = (Handlebars.partials as Record<string, string>)["layer/layer-header"];
-  const headerHtml: string = Handlebars.compile(headerSrc)({
+  const headerSrc = (Handlebars.partials as Record<string, string>)["layer/layer-header"];
+  // Extract the numeric suffix from the default name ("layer 3" → 3),
+  // or fall back to the last 3 chars of the id for imported layers with custom names.
+  const layerNum = layer.name.match(/\d+$/)?.[0] ?? id.slice(-3);
+  const headerHtml = Handlebars.compile(headerSrc)({
     layerNum,
     name: layer.name,
     swatchGradient: swatchGradient(layer.palette),
   });
   $item.html(headerHtml);
-
-  // Replace the outer .layer-header wrapper's class
   $item.find(".layer-header").removeClass("layer-header").addClass("hierarchy-row");
 
-  // Wire name input
-  const $nameInput: JQuery<HTMLInputElement> = $item.find<HTMLInputElement>(".layer-name-input");
-  $nameInput.on("change", function (this: HTMLInputElement): void {
-    renderer.updateLayer(id, { name: $(this).val() as string || `layer ${layerNum}` });
-    onSync();
+  // Name
+  const $nameInput = $item.find<HTMLInputElement>(".layer-name-input");
+  $nameInput.on("change", function (this: HTMLInputElement) {
+    dispatch({ type: "LAYER_UPDATE", payload: { id, patch: { name: $(this).val() as string || layer.name } } });
   });
-  $nameInput.on("click", (e: JQuery.ClickEvent): void => {
-    e.stopPropagation();
-  });
-  $nameInput.on("keydown", function (this: HTMLInputElement, e: JQuery.KeyDownEvent): void {
+  $nameInput.on("click", (e) => e.stopPropagation());
+  $nameInput.on("keydown", function (this: HTMLInputElement, e: JQuery.KeyDownEvent) {
     if (e.key === "Enter") $(this).trigger("blur");
   });
 
-  // Wire visibility toggle
-  const $visBtn: JQuery<HTMLButtonElement> = $item.find<HTMLButtonElement>(".layer-vis");
-  $visBtn.on("click", function (this: HTMLButtonElement, e: JQuery.ClickEvent): void {
+  // Visibility
+  const $visBtn = $item.find<HTMLButtonElement>(".layer-vis");
+  $visBtn.toggleClass("active", layer.visible);
+  $visBtn.on("click", function (this: HTMLButtonElement, e: JQuery.ClickEvent) {
     e.stopPropagation();
-    visible = !visible;
-    $(this).toggleClass("active", visible);
-    const currentOpacity: number = renderer.getLayers().find((l: NoiseLayer) => l.id === id)?.opacity ?? 1;
-    renderer.updateLayer(id, { opacity: visible ? currentOpacity : 0 });
-    $item.toggleClass("hierarchy-item-hidden", !visible);
+    const current = !$(this).hasClass("active");
+    dispatch({ type: "LAYER_UPDATE", payload: { id, patch: { visible: current } } });
   });
 
-  // Wire remove button
-  const $removeBtn: JQuery<HTMLButtonElement> = $item.find<HTMLButtonElement>(".layer-remove");
-  $removeBtn.on("click", (e: JQuery.ClickEvent): void => {
+  // Remove
+  const $removeBtn = $item.find<HTMLButtonElement>(".layer-remove");
+  $removeBtn.on("click", (e) => {
     e.stopPropagation();
-    renderer.removeLayer(id);
-    $item.remove();
-    onRemove(id);
-    onSync();
+    dispatch({ type: "LAYER_REMOVE", payload: { id } });
   });
 
-  // Click to select
-  const $row: JQuery<HTMLElement> = $item.find(".hierarchy-row").length
-    ? $item.find(".hierarchy-row")
-    : $item;
-  $row.on("click", (): void => onSelect(id));
+  // Select on row click
+  const $row = $item.find(".hierarchy-row").length ? $item.find(".hierarchy-row") : $item;
+  $row.on("click", () => dispatch({ type: "LAYER_SELECT", payload: { id } }));
 
-  // ── Drag reordering ──────────────────────────────────
-  const itemEl: HTMLElement = $item[0];
+  // ── Drag reordering ───────────────────────────────────────────────────────
+  const itemEl = $item[0];
 
-  $item.find(".layer-drag-handle").on("mousedown", (): void => {
-    itemEl.draggable = true;
-  });
-  $(document).on("mouseup.drag", (): void => {
-    itemEl.draggable = false;
-  });
+  $item.find(".layer-drag-handle").on("mousedown", () => { itemEl.draggable = true; });
+  $(document).on("mouseup.drag", () => { itemEl.draggable = false; });
 
-  $item.on("dragstart", (e: JQuery.DragStartEvent): void => {
-    const dt: DataTransfer | undefined = e.originalEvent?.dataTransfer ?? undefined;
+  $item.on("dragstart", (e) => {
+    const dt = e.originalEvent?.dataTransfer;
     if (dt) dt.effectAllowed = "move";
     dt?.setData("text/plain", id);
-    requestAnimationFrame((): void => {
-      $item.addClass("dragging");
-    });
+    requestAnimationFrame(() => $item.addClass("dragging"));
   });
 
-  $item.on("dragend", (): void => {
+  $item.on("dragend", () => {
     $item.removeClass("dragging");
     itemEl.draggable = false;
     $(".hierarchy-item").removeClass("drag-over-top drag-over-bottom");
   });
 
-  $item.on("dragover", (e: JQuery.DragOverEvent): void => {
+  $item.on("dragover", (e) => {
     e.preventDefault();
-    const dt: DataTransfer | undefined = e.originalEvent?.dataTransfer ?? undefined;
+    const dt = e.originalEvent?.dataTransfer;
     if (dt) dt.dropEffect = "move";
-    const rect: DOMRect = itemEl.getBoundingClientRect();
-    const clientY: number = e.originalEvent?.clientY ?? 0;
-    const isTop: boolean = clientY < rect.top + rect.height / 2;
+    const rect = itemEl.getBoundingClientRect();
+    const clientY = e.originalEvent?.clientY ?? 0;
+    const isTop = clientY < rect.top + rect.height / 2;
     $(".hierarchy-item").removeClass("drag-over-top drag-over-bottom");
     $item.addClass(isTop ? "drag-over-top" : "drag-over-bottom");
   });
 
-  $item.on("dragleave", (): void => {
-    $item.removeClass("drag-over-top drag-over-bottom");
-  });
+  $item.on("dragleave", () => $item.removeClass("drag-over-top drag-over-bottom"));
 
-  $item.on("drop", (e: JQuery.DropEvent): void => {
+  $item.on("drop", (e) => {
     e.preventDefault();
-    const dt: DataTransfer | undefined = e.originalEvent?.dataTransfer ?? undefined;
-    const fromId: string | undefined = dt?.getData("text/plain");
-    if (fromId === id) return;
+    const dt = e.originalEvent?.dataTransfer;
+    const fromId = dt?.getData("text/plain");
+    if (!fromId || fromId === id) return;
 
-    const $layerList: JQuery<HTMLElement> = $(deps.layerList);
-    const $fromItem: JQuery<HTMLElement> = $layerList.find(`[data-id="${fromId}"]`);
-    if (!$fromItem.length) return;
+    const $list = $(layerListEl);
+    const $from = $list.find(`[data-id="${fromId}"]`);
+    if (!$from.length) return;
 
-    const rect: DOMRect = itemEl.getBoundingClientRect();
-    const clientY: number = e.originalEvent?.clientY ?? 0;
-    const isTop: boolean = clientY < rect.top + rect.height / 2;
-
-    if (isTop) {
-      $fromItem.insertBefore($item);
+    const rect = itemEl.getBoundingClientRect();
+    const clientY = e.originalEvent?.clientY ?? 0;
+    if (clientY < rect.top + rect.height / 2) {
+      $from.insertBefore($item);
     } else {
-      $fromItem.insertAfter($item);
+      $from.insertAfter($item);
     }
     $item.removeClass("drag-over-top drag-over-bottom");
 
-    const orderedIds: string[] = $layerList
+    const orderedIds = $list
       .find(".hierarchy-item")
       .toArray()
-      .map((el: HTMLElement): string => $(el).attr("data-id") ?? "")
+      .map((el) => $(el).attr("data-id") ?? "")
       .filter(Boolean)
       .reverse();
-    renderer.reorderLayers(orderedIds);
-    onSync();
+
+    dispatch({ type: "LAYER_REORDER", payload: { ids: orderedIds } });
   });
 
   return itemEl;
 }
 
 /**
- * Update the swatch on a hierarchy item to reflect current palette.
+ * Update the gradient swatch on a hierarchy item when the palette changes.
  */
 export function updateHierarchySwatch(
-  layerList: HTMLElement,
+  layerListEl: HTMLElement,
   id: string,
-  palette: NoiseLayer["palette"]
+  palette: PaletteStop[]
 ): void {
-  const $item: JQuery<HTMLElement> = $(layerList).find(`[data-id="${id}"]`);
-  $item.find(".layer-swatch").css("background", swatchGradient(palette));
+  $(layerListEl).find(`[data-id="${id}"] .layer-swatch`).css("background", swatchGradient(palette));
 }
 
-// ── Inspector panel (right panel) ───────────────────────
+// ── Inspector panel (right panel) ────────────────────────────────────────────
 
 /**
- * Populate the inspector panel with all editable controls for a layer.
- * Returns nothing — it writes directly into `#inspectorContent`.
+ * Populate the inspector panel with editable controls for `layer`.
+ *
+ * Every control fires dispatch() on change. The inspector is re-rendered
+ * wholesale by demo/index.ts whenever the active layer's state changes.
  */
-export function populateInspector(
-  id: string,
-  deps: LayerCardDeps
-): void {
-  const { renderer, onSync, layerList } = deps;
-  const $container: JQuery<HTMLElement> = $("#inspectorContent");
+export function populateInspector(layer: NoiseLayerConfig): void {
+  const $container = $("#inspectorContent");
   if (!$container.length) return;
 
-  const layer: NoiseLayer | undefined = renderer.getLayers().find((l: NoiseLayer) => l.id === id);
-  if (!layer) {
-    $container.html('<div class="inspector-empty"><p>layer not found</p></div>');
-    return;
-  }
+  const { id } = layer;
 
   const noiseTypes: NoiseType[] = ["simplex", "perlin", "worley", "fbm", "curl"];
   const blendModes: BlendMode[] = ["add", "multiply", "screen", "overlay"];
   const flowTypes: FlowType[] = ["linear", "radial", "spiral", "vortex", "turbulent"];
 
-  /** Apply a partial update to the layer and refresh visual indicators. */
-  function patch(p: Partial<NoiseLayer>): void {
-    renderer.updateLayer(id, p);
-    const l: NoiseLayer | undefined = renderer.getLayers().find((x: NoiseLayer) => x.id === id);
-    if (l) {
-      updateHierarchySwatch(layerList, id, l.palette);
-      $container.find(".palette-preview").css("background", swatchGradient(l.palette));
-    }
+  /** Dispatch a patch for this layer. */
+  function patch(p: Partial<NoiseLayerConfig>): void {
+    dispatch({ type: "LAYER_UPDATE", payload: { id, patch: p } });
   }
 
-  // Clear and rebuild
   $container.empty();
+  const $body = $('<div class="inspector-body"></div>');
 
-  const $body: JQuery<HTMLElement> = $('<div class="inspector-body"></div>');
-
-  // Layer name at top of inspector
-  const $nameGroup: JQuery<HTMLElement> = $('<div class="group"><div class="group-label">name</div></div>');
-  const $nameInput: JQuery<HTMLInputElement> = $(
-    '<input type="text" class="layer-name-input inspector-name-input" />'
-  ) as JQuery<HTMLInputElement>;
+  // Name
+  const $nameGroup = $('<div class="group"><div class="group-label">name</div></div>');
+  const $nameInput = $('<input type="text" class="layer-name-input inspector-name-input" />') as JQuery<HTMLInputElement>;
   $nameInput.val(layer.name);
-  $nameInput.on("change", function (this: HTMLInputElement): void {
-    const newName: string = ($(this).val() as string).trim() || "layer";
-    patch({ name: newName });
-    // Also update the hierarchy item's name input
-    $(layerList)
-      .find(`[data-id="${id}"] .layer-name-input`)
-      .val(newName);
-    onSync();
+  $nameInput.on("change", function (this: HTMLInputElement) {
+    patch({ name: ($(this).val() as string).trim() || "layer" });
   });
   $nameGroup.append($nameInput);
   $body.append($nameGroup);
 
   $body.append(
-    makeChipGroup("noise type", noiseTypes, layer.noiseType, (v: string): void => {
+    makeChipGroup("noise type", noiseTypes, layer.noiseType, (v) => {
       patch({ noiseType: v as NoiseType });
       $body.find(".octaves-group").toggleClass("disabled", v !== "fbm");
-      onSync();
     })
   );
 
   $body.append(
-    makeChipGroup("blend mode", blendModes, layer.blendMode, (v: string): void => {
-      patch({ blendMode: v as BlendMode });
-    })
+    makeChipGroup("blend mode", blendModes, layer.blendMode, (v) => patch({ blendMode: v as BlendMode }))
   );
 
-  const flowGroup: HTMLElement = document.createElement("div");
-  const $flowGroup: JQuery<HTMLElement> = $(flowGroup);
+  const $flowGroup = $("<div></div>");
 
   $body.append(
-    makeToggleRow("animate", layer.animate, (v: boolean): void => {
+    makeToggleRow("animate", layer.animate, (v) => {
       patch({ animate: v });
       $flowGroup.css("display", v ? "block" : "none");
     })
   );
 
   $flowGroup.append(
-    makeChipGroup("flow type", flowTypes, layer.flowType, (v: string): void => {
+    makeChipGroup("flow type", flowTypes, layer.flowType, (v) => {
       patch({ flowType: v as FlowType });
       $body.find(".dir-group").toggleClass("disabled", !["linear", "turbulent"].includes(v));
-      onSync();
     })
   );
   $flowGroup.css("display", layer.animate ? "block" : "none");
   $body.append($flowGroup);
 
-  $body.append(makeSlider("scale", 0.1, 12, 0.1, layer.scale, 1, (v: number): void => patch({ scale: v })));
-  $body.append(makeSlider("speed", 0, 3, 0.01, layer.speed, 2, (v: number): void => patch({ speed: v })));
+  $body.append(makeSlider("scale", 0.1, 12, 0.1, layer.scale, 1, (v) => patch({ scale: v })));
+  $body.append(makeSlider("speed", 0, 3, 0.01, layer.speed, 2, (v) => patch({ speed: v })));
 
-  const $dialGroup: JQuery<HTMLElement> = $('<div class="dir-group"></div>');
+  const $dialGroup = $('<div class="dir-group"></div>');
   if (!["linear", "turbulent"].includes(layer.flowType)) $dialGroup.addClass("disabled");
-  $dialGroup.append(makeDial(layer.direction, (dir: [number, number]): void => patch({ direction: dir })));
+  $dialGroup.append(makeDial(layer.direction, (dir) => patch({ direction: dir })));
   $body.append($dialGroup);
 
-  const octGroup: HTMLElement = makeSlider("octaves", 1, 8, 1, layer.octaves, 0, (v: number): void => patch({ octaves: v }));
-  const $octGroup: JQuery<HTMLElement> = $(octGroup);
+  const octGroup = makeSlider("octaves", 1, 8, 1, layer.octaves, 0, (v) => patch({ octaves: v }));
+  const $octGroup = $(octGroup);
   $octGroup.addClass("octaves-group");
   if (layer.noiseType !== "fbm") $octGroup.addClass("disabled");
   $body.append($octGroup);
 
-  $body.append(makeSlider("contrast", 0.1, 4, 0.05, layer.contrast, 2, (v: number): void => patch({ contrast: v })));
-  $body.append(makeSlider("brightness", -1, 1, 0.01, layer.brightness, 2, (v: number): void => patch({ brightness: v })));
-  $body.append(makeSlider("domain warp", 0, 2, 0.01, layer.warp, 2, (v: number): void => patch({ warp: v })));
-  $body.append(makeSlider("curl flow", 0, 2, 0.01, layer.curlStrength, 2, (v: number): void => patch({ curlStrength: v })));
+  $body.append(makeSlider("contrast", 0.1, 4, 0.05, layer.contrast, 2, (v) => patch({ contrast: v })));
+  $body.append(makeSlider("brightness", -1, 1, 0.01, layer.brightness, 2, (v) => patch({ brightness: v })));
+  $body.append(makeSlider("domain warp", 0, 2, 0.01, layer.warp, 2, (v) => patch({ warp: v })));
+  $body.append(makeSlider("curl flow", 0, 2, 0.01, layer.curlStrength, 2, (v) => patch({ curlStrength: v })));
+  $body.append(makeSlider("opacity", 0, 1, 0.01, layer.opacity, 2, (v) => patch({ opacity: v })));
 
   $body.append(
-    makeSlider("opacity", 0, 1, 0.01, layer.opacity, 2, (v: number): void => {
-      patch({ opacity: v });
-    })
-  );
-
-  $body.append(
-    makePaletteEditor(layer.palette, (pal: NoiseLayer["palette"]): void => {
-      patch({ palette: pal });
-      onSync();
-    })
+    makePaletteEditor(layer.palette, (pal) => patch({ palette: pal }))
   );
 
   $container.append($body);

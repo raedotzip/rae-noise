@@ -1,5 +1,6 @@
 import $ from "jquery";
-import type { NoiseLayer } from "rae-noise";
+import type { NoiseLayerConfig } from "rae-noise";
+import { getState } from "../store";
 import { rgbToHex } from "./color";
 
 /** A node in the visual node graph — represents one layer. */
@@ -15,13 +16,6 @@ interface GraphNode {
 interface GraphEdge {
   from: string;
   to: string;
-}
-
-/** Dependencies required by the node graph. */
-interface NodeGraphDeps {
-  getRenderer: () => {
-    getLayers: () => NoiseLayer[];
-  };
 }
 
 /** Port hit-test result. */
@@ -40,7 +34,7 @@ const GRID_SIZE: number = 36;
  * Create the interactive node graph visualisation.
  * Returns an object with `open` and `syncFromRenderer` methods.
  */
-export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
+export function createNodeGraph() {
   const $modal: JQuery<HTMLElement> = $("#nodeModal");
   const $close: JQuery<HTMLElement> = $("#nodeModalClose");
   const $canvas: JQuery<HTMLCanvasElement> = $("#nodeCanvas") as JQuery<HTMLCanvasElement>;
@@ -65,11 +59,11 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
 
   /* ── Graph sync ───────────────────────────────────────── */
 
-  /** Synchronise the node graph state with the current renderer layers. */
-  function syncFromRenderer(): void {
-    const layers: NoiseLayer[] = getRenderer().getLayers();
+  /** Synchronise the node graph state with the current app state. */
+  function sync(): void {
+    const layers: NoiseLayerConfig[] = getState().layers;
 
-    layers.forEach((layer: NoiseLayer, i: number): void => {
+    layers.forEach((layer: NoiseLayerConfig, i: number): void => {
       const mid = layer.palette[Math.floor(layer.palette.length / 2)];
       const color: string = mid ? rgbToHex(mid) : "#ffffff";
 
@@ -91,7 +85,7 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
       }
     });
 
-    const liveIds: Set<string> = new Set(layers.map((l: NoiseLayer): string => l.id));
+    const liveIds: Set<string> = new Set(layers.map((l: NoiseLayerConfig): string => l.id));
 
     for (let i: number = nodes.length - 1; i >= 0; i--) {
       const n: GraphNode = nodes[i];
@@ -113,7 +107,7 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
 
   /** Open the node graph modal and sync state. */
   function open(): void {
-    syncFromRenderer();
+    sync();
     resize();
     $modal.removeClass("hidden");
   }
@@ -221,9 +215,9 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
   /** Draw all node cards with their labels and ports. */
   function drawNodes(): void {
     for (const n of nodes) {
-      const layer: NoiseLayer | undefined = getRenderer()
-        .getLayers()
-        .find((l: NoiseLayer): boolean => l.id === n.id);
+      const layer: NoiseLayerConfig | undefined = getState().layers.find(
+        (l: NoiseLayerConfig): boolean => l.id === n.id
+      );
 
       ctx.shadowColor = "rgba(0,0,0,0.5)";
       ctx.shadowBlur = 16;
@@ -372,5 +366,5 @@ export function createNodeGraph({ getRenderer }: NodeGraphDeps) {
     if (!$modal.hasClass("hidden")) resize();
   }).observe(canvas);
 
-  return { open, syncFromRenderer };
+  return { open, sync };
 }
