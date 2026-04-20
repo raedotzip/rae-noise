@@ -47,7 +47,7 @@
     "graph:affected": "turbo run build --filter=...[origin/main] --graph"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.0",
+    "@biomejs/biome": "^2.4.11",
     "@changesets/changelog-github": "^0.5.0",
     "@changesets/cli": "^2.27.0",
     "@playwright/test": "^1.59.1",
