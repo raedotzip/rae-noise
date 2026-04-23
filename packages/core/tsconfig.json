@@ -1,8 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "module": "ESNext",
-    "types": ["vitest/globals"]
-  },
-  "include": ["src/**/*", "test/**/*"]
-}
